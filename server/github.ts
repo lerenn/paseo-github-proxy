@@ -1,4 +1,5 @@
 import type { Priority, Resource } from "../shared/budget";
+import type { CallLog } from "./activity";
 import { EtagCache } from "./cache";
 import { RateLimiter } from "./limiter";
 import { normalizeOwner, scrub, tokenKey, type TokenStore } from "./tokens";
@@ -51,6 +52,8 @@ export interface ClientOptions {
   cache?: EtagCache;
   fetch?: typeof fetch;
   baseUrl?: string;
+  /** Receives every request, for the screen's activity list. */
+  calls?: CallLog;
 }
 
 export function resourceFor(path: string): Resource {
@@ -69,6 +72,7 @@ export class GitHubClient {
   private readonly tokens: TokenStore;
   private readonly fetchImpl: typeof fetch;
   private readonly base: string;
+  private readonly calls?: CallLog;
 
   constructor(options: ClientOptions) {
     this.tokens = options.tokens;
@@ -76,6 +80,7 @@ export class GitHubClient {
     this.cache = options.cache ?? new EtagCache();
     this.fetchImpl = options.fetch ?? fetch;
     this.base = options.baseUrl ?? API;
+    this.calls = options.calls;
   }
 
   /** Rate-limit identity of an owner's token. */
@@ -86,6 +91,22 @@ export class GitHubClient {
   }
 
   async rest<T = unknown>(req: RestRequest): Promise<RestResponse<T>> {
+    let status: number | null = null;
+    let cached = false;
+    try {
+      const res = await this.send<T>(req);
+      status = res.status;
+      cached = res.cached;
+      return res;
+    } catch (err) {
+      status = err instanceof GitHubError ? err.status : null;
+      throw err;
+    } finally {
+      this.calls?.record({ at: Date.now(), method: req.method ?? "GET", path: req.path, status, cached, priority: req.priority ?? "normal" });
+    }
+  }
+
+  private async send<T>(req: RestRequest): Promise<RestResponse<T>> {
     const owner = normalizeOwner(req.owner);
     const token = this.tokens.get(owner);
     if (!token) throw new NoTokenError(owner);

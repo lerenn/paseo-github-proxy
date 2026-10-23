@@ -73,3 +73,19 @@ export const cancelSubscriptionRpc = defineRpc({
   input: z.object({ id: z.string() }),
   output: z.object({}),
 });
+
+export const activityEntrySchema = z.object({
+  at: z.string(),
+  outcome: z.enum(["ok", "failed", "refused"]),
+  /** What happened, in plain words. */
+  text: z.string(),
+  detail: z.string().nullable().optional(),
+});
+export type ActivityEntry = z.infer<typeof activityEntrySchema>;
+
+/** The latest calls agents made through the proxy and the writes it refused. */
+export const activityRpc = defineRpc({
+  name: "github-proxy.activity",
+  input: z.object({ limit: z.number().int().min(1).max(50).default(10) }),
+  output: z.object({ entries: z.array(activityEntrySchema) }),
+});
