@@ -1,8 +1,7 @@
 import { useRpc, useSettings, type PluginScreenProps } from "@getpaseo/plugin/client";
-import { SettingsInput } from "@getpaseo/plugin/client/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import type { ResourceBudget } from "../shared/budget";
 import {
   activityRpc, clearTokenRpc, refreshBudgetRpc, setTokenRpc, statusRpc, subscriptionsRpc, type OwnerStatus,
@@ -54,62 +53,104 @@ function Section({ title, hint, styles, children }: { title: string; hint?: stri
 }
 
 function Tokens({ owners, styles, onChanged }: { owners: OwnerStatus[]; styles: Styles; onChanged(): void }) {
+  const [adding, setAdding] = useState(false);
   return (
     <Section
       title="Tokens"
       styles={styles}
       hint="A GitHub token lets the proxy read and write on GitHub for your agents, so the agents never hold one. Add one per GitHub owner or organization. It is saved on this machine and never shown again."
     >
-      {owners.length === 0 ? <Text style={styles.muted}>No tokens yet.</Text> : null}
-      {owners.map((o) => <TokenRow key={o.owner} owner={o} styles={styles} onChanged={onChanged} />)}
-      <TokenEditor styles={styles} onSaved={onChanged} />
+      <View style={styles.tokenList}>
+        {owners.length === 0 ? <Text style={styles.muted}>No tokens yet.</Text> : null}
+        {owners.length > 0 ? (
+          <View style={styles.rows}>
+            {owners.map((o, i) => <TokenRow key={o.owner} owner={o} first={i === 0} styles={styles} onChanged={onChanged} />)}
+          </View>
+        ) : null}
+        {adding ? (
+          <TokenForm styles={styles} onCancel={() => setAdding(false)} onSaved={() => { setAdding(false); onChanged(); }} />
+        ) : (
+          <Button styles={styles} label="Add token" onPress={() => setAdding(true)} />
+        )}
+      </View>
     </Section>
   );
 }
 
-function TokenRow({ owner, styles, onChanged }: { owner: OwnerStatus; styles: Styles; onChanged(): void }) {
+function TokenRow({ owner, first, styles, onChanged }: { owner: OwnerStatus; first: boolean; styles: Styles; onChanged(): void }) {
   const clear = useRpc(clearTokenRpc);
   const [replacing, setReplacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return (
-    <View style={styles.field}>
-      <View style={styles.row}>
-        <Text style={styles.name}>{owner.owner}</Text>
-        <Text style={styles.badge}>{owner.error ? "Not working" : "Set"}</Text>
-        <View style={styles.row}>
-          <Button styles={styles} label={replacing ? "Cancel" : "Replace"} onPress={() => setReplacing((v) => !v)} />
-          <Button styles={styles} label="Remove" onPress={() => clear({ owner: owner.owner }).then(onChanged, (e) => setError((e as Error).message))} />
+    <View style={[styles.tokenRow, !first && styles.tokenRowDivider]}>
+      <View style={styles.tokenLine}>
+        <View style={styles.tokenName}>
+          <Text style={styles.name} numberOfLines={1}>{owner.owner}</Text>
+          <Text style={styles.badge}>{owner.error ? "Not working" : "Set"}</Text>
+        </View>
+        <View style={styles.tokenActions}>
+          <Button styles={styles} small label={replacing ? "Cancel" : "Replace"} onPress={() => setReplacing((v) => !v)} />
+          <Button styles={styles} small label="Remove" onPress={() => clear({ owner: owner.owner }).then(onChanged, (e) => setError((e as Error).message))} />
         </View>
       </View>
       {owner.error ? <Text style={styles.error}>{owner.error}</Text> : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      {replacing ? <TokenEditor styles={styles} fixedOwner={owner.owner} onSaved={() => { setReplacing(false); onChanged(); }} /> : null}
+      {replacing ? (
+        <TokenForm styles={styles} fixedOwner={owner.owner} onCancel={() => setReplacing(false)} onSaved={() => { setReplacing(false); onChanged(); }} />
+      ) : null}
     </View>
   );
 }
 
-/** Write-only: the field is never filled from storage. Without `fixedOwner` it also asks for the owner. */
-function TokenEditor({ styles, fixedOwner, onSaved }: { styles: Styles; fixedOwner?: string; onSaved(): void }) {
+/**
+ * Compact inline form. Write-only: the token field starts empty, is masked, and is cleared after
+ * saving. Without `fixedOwner` it also asks for the owner.
+ */
+function TokenForm({ styles, fixedOwner, onCancel, onSaved }: { styles: Styles; fixedOwner?: string; onCancel(): void; onSaved(): void }) {
   const setToken = useRpc(setTokenRpc);
   const [owner, setOwner] = useState("");
   const [token, setTokenValue] = useState("");
-  const [nonce, setNonce] = useState(0);
-  const who = fixedOwner ?? owner;
+  const who = (fixedOwner ?? owner).trim();
+  const ready = who.length > 0 && token.trim().length > 0;
   const save = useMutation({
     mutationFn: () => setToken({ owner: who, token }),
     onSuccess: () => {
-      setOwner("");
       setTokenValue("");
-      setNonce((n) => n + 1);
       onSaved();
     },
   });
   return (
-    <View key={nonce} style={styles.editor}>
-      {fixedOwner ? null : <SettingsInput label="Add a token for owner" hint="For example lerenn or anyshift-io" initialValue="" onChangeText={setOwner} />}
-      <SettingsInput label={fixedOwner ? `New token for ${fixedOwner}` : "Token"} initialValue="" secureTextEntry onChangeText={setTokenValue} placeholder="Paste token" />
+    <View style={styles.tokenForm}>
+      <View style={styles.tokenInputs}>
+        {fixedOwner ? null : (
+          <TextInput
+            style={[styles.input, styles.inputOwner]}
+            value={owner}
+            onChangeText={setOwner}
+            placeholder="Owner, e.g. lerenn"
+            placeholderTextColor={styles.placeholder.color}
+            autoCapitalize="none"
+            autoCorrect={false}
+            accessibilityLabel="GitHub owner or organization"
+          />
+        )}
+        <TextInput
+          style={[styles.input, styles.inputToken]}
+          value={token}
+          onChangeText={setTokenValue}
+          placeholder={fixedOwner ? `New token for ${fixedOwner}` : "Paste token"}
+          placeholderTextColor={styles.placeholder.color}
+          secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+          accessibilityLabel="GitHub token"
+        />
+      </View>
       {save.error ? <Text style={styles.error}>{(save.error as Error).message}</Text> : null}
-      <Button styles={styles} primary label={save.isPending ? "Checking with GitHub…" : "Save token"} onPress={() => who && token && save.mutate()} />
+      <View style={styles.tokenActions}>
+        <Button styles={styles} small primary disabled={!ready || save.isPending} label={save.isPending ? "Checking with GitHub…" : "Save"} onPress={() => ready && save.mutate()} />
+        <Button styles={styles} small label="Cancel" onPress={onCancel} />
+      </View>
     </View>
   );
 }
@@ -238,10 +279,17 @@ function formatBudget(r: ResourceBudget): string {
   return `${name}: ${r.remaining.toLocaleString("en-US")} of ${r.limit.toLocaleString("en-US")} left${reset}`;
 }
 
-function Button({ styles, label, onPress, primary }: { styles: Styles; label: string; onPress(): void; primary?: boolean }) {
+function Button({ styles, label, onPress, primary, small, disabled }: { styles: Styles; label: string; onPress(): void; primary?: boolean; small?: boolean; disabled?: boolean }) {
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={[styles.button, primary && styles.buttonPrimary]}>
-      <Text style={primary ? styles.buttonPrimaryText : styles.buttonText}>{label}</Text>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: Boolean(disabled) }}
+      disabled={disabled}
+      onPress={onPress}
+      style={[styles.button, small && styles.buttonSmall, primary && styles.buttonPrimary, disabled && styles.buttonDisabled]}
+    >
+      <Text style={[primary ? styles.buttonPrimaryText : styles.buttonText, small && styles.buttonSmallText]}>{label}</Text>
     </Pressable>
   );
 }
@@ -267,11 +315,26 @@ function makeStyles(theme: PluginScreenProps["theme"], compact: boolean) {
     card: { gap: 4, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.surface1 },
     advanced: { gap: 14 },
     field: { gap: 2 },
-    editor: { gap: 8, paddingTop: 6 },
+    placeholder: { color: theme.colors.foregroundMuted },
+    tokenList: { gap: 10, maxWidth: 640, alignItems: "stretch" as const },
+    rows: { borderWidth: 1, borderColor: theme.colors.border, borderRadius: 10, backgroundColor: theme.colors.surface0 },
+    tokenRow: { gap: 8, paddingVertical: 10, paddingHorizontal: 12 },
+    tokenRowDivider: { borderTopWidth: 1, borderTopColor: theme.colors.border },
+    tokenLine: { flexDirection: "row" as const, alignItems: "center" as const, justifyContent: "space-between" as const, gap: 12 },
+    tokenName: { flexDirection: "row" as const, alignItems: "center" as const, gap: 8, flexShrink: 1 },
+    tokenActions: { flexDirection: "row" as const, alignItems: "center" as const, gap: 8 },
+    tokenForm: { gap: 8, paddingTop: 2 },
+    tokenInputs: { flexDirection: compact ? ("column" as const) : ("row" as const), gap: 8 },
+    input: { minHeight: 36, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.surface2, color: theme.colors.foreground, fontSize: 14 },
+    inputOwner: { flex: 1 },
+    inputToken: { flex: 2 },
     startBox: { gap: 8, paddingTop: 10, borderTopWidth: 1, borderTopColor: theme.colors.border },
     choice: { gap: 2, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border },
     choiceSelected: { borderColor: theme.colors.accent },
     button: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, borderWidth: 1, borderColor: theme.colors.border, alignSelf: "flex-start" as const },
+    buttonSmall: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: 6 },
+    buttonSmallText: { fontSize: 13 },
+    buttonDisabled: { opacity: 0.5 },
     buttonPrimary: { backgroundColor: theme.colors.accent, borderColor: theme.colors.accent },
     buttonText: { color: theme.colors.foreground, fontSize: 14 },
     buttonPrimaryText: { color: theme.colors.accentForeground, fontSize: 14 },
