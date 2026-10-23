@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { graphqlMutationFields } from "./classify";
+import { eventKindSchema } from "../shared/subscriptions";
 import {
   UsageError, apiGet, getChecks, getDiff, getIssue, getPull, graphqlQuery, listComments, listPulls, ownerOfPath, prFields, resolveRepo,
   type OpsContext,
@@ -187,5 +188,51 @@ export const writeTools: ToolDef[] = [
   },
 ];
 
+function needSubs(ctx: OpsContext) {
+  if (!ctx.subscriptions) throw new UsageError("Subscriptions are not available in this context.");
+  return ctx.subscriptions;
+}
+
+/** Wake-up subscriptions. They only watch; they never change anything on GitHub. */
+export const subscriptionTools: ToolDef[] = [
+  {
+    name: "github_subscribe",
+    description:
+      "Get woken up (you receive a prompt) when something happens on a pull request, or when timeout_seconds pass. Events: checks_completed (CI finished on the current head), " +
+      "review_submitted, pr_merged, pr_closed (closed without merging), comment_created. Fires once, then ends. If the condition already holds you get the answer immediately. " +
+      "End your turn after subscribing instead of polling.",
+    input: z.object({
+      repo,
+      number: num.describe("Pull request number."),
+      events: z.array(eventKindSchema).min(1),
+      timeout_seconds: z.number().int().min(30).describe("Deadline. You are woken with a timeout notice if nothing happened."),
+      ignore_authors: z.array(z.string()).optional().describe("GitHub logins whose comments and reviews do not count, for example your own."),
+    }),
+    async run({ repo: r, number, events, timeout_seconds, ignore_authors }, ctx) {
+      const id = await resolveRepo(ctx, r);
+      return needSubs(ctx).subscribe({ agentId: ctx.agentId ?? null }, { repo: `${id.owner}/${id.repo}`, number, events, timeoutSeconds: timeout_seconds, ignoreAuthors: ignore_authors });
+    },
+  },
+  {
+    name: "github_unsubscribe",
+    description: "Cancel one of your active subscriptions.",
+    input: z.object({ id: z.string() }),
+    async run({ id }, ctx) {
+      if (!needSubs(ctx).cancel(id, ctx.agentId ?? undefined)) throw new UsageError(`No active subscription ${id} for this agent.`);
+      return { cancelled: id };
+    },
+  },
+  {
+    name: "github_subscriptions",
+    description: "List your subscriptions, active and recently finished.",
+    input: z.object({}),
+    async run(_args, ctx) {
+      return needSubs(ctx).list(ctx.agentId ?? undefined);
+    },
+  },
+];
+
 export const READ_TOOL_NAMES = readTools.map((t) => t.name);
-export const ALL_TOOLS = [...readTools, ...writeTools];
+/** Tools that cannot change anything on GitHub; pre-approved for locked-out agents. */
+export const PREAPPROVED_TOOL_NAMES = [...READ_TOOL_NAMES, ...subscriptionTools.map((t) => t.name)];
+export const ALL_TOOLS = [...readTools, ...subscriptionTools, ...writeTools];

@@ -18,7 +18,10 @@ beforeAll(async () => {
   cleanup = contribute({
     before: (name: string, h: Handler) => (before.set(name, h), () => before.delete(name)),
     on: (name: string, h: Handler) => (on.set(name, h), () => on.delete(name)),
-    registerSettings: () => ({ read: async () => ({ status: "ready", revision: "1", values: { allow: ["comment"], deny: [], repos: [] } }), subscribe: () => () => {} }),
+    registerSettings: (def: { id: string }) => ({
+      read: async () => ({ status: "ready", revision: "1", values: def.id === "policy" ? { allow: ["comment"], deny: [], repos: [] } : { webhooks: "off", pollSeconds: 60, pollSecondsWithWebhook: 300, maxTimeoutMinutes: 240 } }),
+      subscribe: () => () => {},
+    }),
     handle: (contract: { name: string }, h: Handler) => void rpcs.set(contract.name, h),
   } as never) as () => Promise<void>;
 });
@@ -55,6 +58,11 @@ describe("plugin wiring", () => {
     expect((await call()).status).toBe(200);
     await on.get("agent.archived")!({ agent: { id: "a1" } }, {});
     expect((await call()).status).toBe(401);
+  });
+
+  it("lists subscriptions through the RPC and wakes nobody by itself", async () => {
+    const out = await rpcs.get("github-proxy.subscriptions")!({}, { paseo: {} });
+    expect(out).toEqual({ subscriptions: [], forwarders: [] });
   });
 
   it("ignores session opens without a capability", async () => {

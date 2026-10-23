@@ -14,8 +14,8 @@ It is a generic rebuild of the github-proxy service used in the Gas City.
 | 1 | Skeleton, CI, docs | merged |
 | 2 | Token settings, REST/GraphQL client, cache, rate limiter, screen | merged |
 | 3 | MCP tools, `gh` shim, lockout hook | merged |
-| 4 | Write policy | in review |
-| 5 | Subscriptions: websocket, polling, timeouts | planned |
+| 4 | Write policy | merged |
+| 5 | Subscriptions: websocket, polling, timeouts | in review |
 
 ## Design
 
@@ -27,7 +27,7 @@ It is a generic rebuild of the github-proxy service used in the Gas City.
   real `gh` is denied. An agent opts out with `PASEO_GITHUB_PROXY=off` in its environment.
 - Writes: comments, PR creation, labels and review requests are allowed; merges and admin calls are
   refused by default. Per-repo allow and deny lists. Refused writes never reach GitHub and are audited.
-- Events: see [docs/subscriptions.md](docs/subscriptions.md).
+- Events: `github_subscribe` wakes the agent with a prompt on checks finished, review submitted, PR merged or closed, new comment, or a timeout. Webhook forwarder for latency, ETag polling (60 s or slower) as the safety net. See [docs/subscriptions.md](docs/subscriptions.md).
 - Out of scope: git clone and push. Agents keep using SSH.
 
 ## How agents reach it

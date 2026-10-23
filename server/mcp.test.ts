@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { McpServer } from "./mcp";
 import { fakeGithub, standardRoutes } from "./testing";
-import { readTools } from "./tools";
+import { ALL_TOOLS, readTools } from "./tools";
 
 function setup(routes: Record<string, unknown> = standardRoutes) {
   const { client, calls } = fakeGithub(routes as never);
@@ -83,5 +83,53 @@ describe("McpServer", () => {
     const { call } = setup();
     expect((await call("resources/list")).error.code).toBe(-32601);
     expect((await call("tools/call", { name: "nope" })).error.code).toBe(-32602);
+  });
+});
+
+describe("subscription tools", () => {
+  const stub = () => {
+    const calls: unknown[] = [];
+    return {
+      calls,
+      subs: {
+        subscribe: async (caller: unknown, req: unknown) => (calls.push({ caller, req }), { subscription: { id: "abc" } }),
+        cancel: (id: string, agent?: string) => (calls.push({ cancel: id, agent }), id === "abc"),
+        list: (agent?: string) => (calls.push({ list: agent }), []),
+      } as never,
+    };
+  };
+  const ask = async (name: string, args: object, ctx: object) => {
+    const { client } = fakeGithub(standardRoutes as never);
+    const r = (await new McpServer(ALL_TOOLS).handle({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }, { client, ...ctx })) as any;
+    return { isError: Boolean(r.result.isError), text: r.result.content[0].text as string };
+  };
+
+  it("subscribes on behalf of the calling agent, not an id the model supplies", async () => {
+    const { calls, subs } = stub();
+    const r = await ask("github_subscribe", { repo: "acme/app", number: 7, events: ["pr_merged"], timeout_seconds: 600 }, { subscriptions: subs, agentId: "agent-9" });
+    expect(r.isError).toBe(false);
+    expect(calls[0]).toEqual({ caller: { agentId: "agent-9" }, req: { repo: "acme/app", number: 7, events: ["pr_merged"], timeoutSeconds: 600, ignoreAuthors: undefined } });
+  });
+
+  it("validates events and the minimum timeout", async () => {
+    const { subs } = stub();
+    expect((await ask("github_subscribe", { repo: "acme/app", number: 7, events: ["nope"], timeout_seconds: 600 }, { subscriptions: subs })).isError).toBe(true);
+    expect((await ask("github_subscribe", { repo: "acme/app", number: 7, events: ["pr_merged"], timeout_seconds: 1 }, { subscriptions: subs })).isError).toBe(true);
+    expect((await ask("github_subscribe", { repo: "acme/app", number: 7, events: [], timeout_seconds: 600 }, { subscriptions: subs })).isError).toBe(true);
+  });
+
+  it("scopes unsubscribe and list to the calling agent", async () => {
+    const { calls, subs } = stub();
+    expect((await ask("github_unsubscribe", { id: "abc" }, { subscriptions: subs, agentId: "a1" })).isError).toBe(false);
+    expect((await ask("github_unsubscribe", { id: "zzz" }, { subscriptions: subs, agentId: "a1" })).text).toContain("No active subscription");
+    await ask("github_subscriptions", {}, { subscriptions: subs, agentId: "a1" });
+    expect(calls).toContainEqual({ cancel: "abc", agent: "a1" });
+    expect(calls).toContainEqual({ list: "a1" });
+  });
+
+  it("is pre-approved for locked-out agents because it never writes", async () => {
+    const { PREAPPROVED_TOOL_NAMES } = await import("./tools");
+    expect(PREAPPROVED_TOOL_NAMES).toContain("github_subscribe");
+    expect(PREAPPROVED_TOOL_NAMES).not.toContain("github_comment");
   });
 });

@@ -47,3 +47,20 @@ export const standardRoutes = {
   "/repos/acme/app/pulls?head=acme%3Afeat&state=all&per_page=1": [PR],
   "/repos/acme/app/pulls/7/files?per_page=100": [{ filename: "a.ts", additions: 3, deletions: 1, status: "modified" }],
 };
+
+/** Fake GitHub driven by one function (path with query -> body or Response); records calls. */
+export function dynamicGithub(handler: (path: string, init: RequestInit) => unknown) {
+  const calls: { url: string; init: RequestInit }[] = [];
+  const impl = async (input: string | URL | Request, init: RequestInit = {}) => {
+    const key = String(input).replace("https://api.github.com", "");
+    calls.push({ url: key, init });
+    const out = handler(key, init);
+    if (out instanceof Response) return out;
+    if (out === undefined) return new Response(JSON.stringify({ message: `no route ${key}` }), { status: 404 });
+    return new Response(JSON.stringify(out), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  const tokens = new TokenStore(path.join(tmp(), "tokens.json"));
+  tokens.set("acme", "tok_acme");
+  const client = new GitHubClient({ tokens, limiter: new RateLimiter({ writeGapMs: 0 }), fetch: vi.fn(impl) as unknown as typeof fetch });
+  return { client, calls, tokens };
+}

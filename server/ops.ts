@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { Priority } from "../shared/budget";
 import type { GitHubClient } from "./github";
+import type { SubscriptionManager } from "./subscriptions";
 import type { WriteGate } from "./write";
 
 const run = promisify(execFile);
@@ -13,6 +14,7 @@ export interface OpsContext {
   priority?: Priority;
   /** Present for MCP calls; the gh shim never writes. */
   write?: WriteGate;
+  subscriptions?: SubscriptionManager;
   /** The calling agent, once its session is bound. */
   agentId?: string | null;
 }
