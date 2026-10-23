@@ -1,0 +1,14 @@
+{
+  "id": "github-proxy",
+  "name": "GitHub proxy",
+  "description": "One daemon-side GitHub client for all agents: shared tokens, cache, rate-limit budget, write policy and event wake-ups.",
+  "requirements": {
+    "paseo": ">=0.11.2"
+  },
+  "build": [
+    [
+      "npm",
+      "ci"
+    ]
+  ]
+}
