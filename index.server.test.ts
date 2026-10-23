@@ -7,6 +7,7 @@ type Handler = (input: any, ctx?: any) => any;
 const before = new Map<string, Handler>();
 const on = new Map<string, Handler>();
 const rpcs = new Map<string, Handler>();
+let scope: "opt-in" | "all" = "opt-in";
 let cleanup: () => Promise<void> | void;
 let home: string;
 
@@ -19,7 +20,7 @@ beforeAll(async () => {
     before: (name: string, h: Handler) => (before.set(name, h), () => before.delete(name)),
     on: (name: string, h: Handler) => (on.set(name, h), () => on.delete(name)),
     registerSettings: (def: { id: string }) => ({
-      read: async () => ({ status: "ready", revision: "1", values: def.id === "policy" ? { allow: ["comment"], deny: [], repos: [] } : { webhooks: "off", pollSeconds: 60, pollSecondsWithWebhook: 300, maxTimeoutMinutes: 240 } }),
+      read: async () => ({ status: "ready", revision: "1", values: def.id === "policy" ? { allow: ["comment"], deny: [], repos: [] } : { lockoutScope: scope, webhooks: "off", pollSeconds: 60, pollSecondsWithWebhook: 300, maxTimeoutMinutes: 240 } }),
       subscribe: () => () => {},
     }),
     handle: (contract: { name: string }, h: Handler) => void rpcs.set(contract.name, h),
@@ -37,20 +38,32 @@ describe("plugin wiring", () => {
     expect(statSync(path.join(home, ".paseo", "github-proxy", "bin", "gh")).mode & 0o111).not.toBe(0);
   });
 
-  it("locks down new agents and exposes the endpoint in status", async () => {
-    const out = await create({ GH_TOKEN: "secret" });
+  it("leaves agents untouched by default (scope opt-in)", async () => {
+    expect(await create({ GH_TOKEN: "secret" })).toBeUndefined();
+    expect(await create()).toBeUndefined();
+    expect(await create({ PASEO_GITHUB_PROXY: "off" })).toBeUndefined();
+  });
+
+  it("locks down opted-in agents and exposes the endpoint in status", async () => {
+    const out = await create({ GH_TOKEN: "secret", PASEO_GITHUB_PROXY: "on" });
     expect(out.env.GH_TOKEN).toBe("");
     expect(out.config.mcpServers["github-proxy"].url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/mcp$/);
     const status = await rpcs.get("github-proxy.status")!({});
     expect(status.endpoint.url).toMatch(/^http:\/\/127\.0\.0\.1:/);
   });
 
-  it("leaves opted-out agents untouched", async () => {
-    expect(await create({ PASEO_GITHUB_PROXY: "off", GH_TOKEN: "mine" })).toBeUndefined();
+  it("under scope all, locks down everyone except opt-outs", async () => {
+    scope = "all";
+    try {
+      expect((await create({ GH_TOKEN: "x" })).env.GH_TOKEN).toBe("");
+      expect(await create({ PASEO_GITHUB_PROXY: "off", GH_TOKEN: "mine" })).toBeUndefined();
+    } finally {
+      scope = "opt-in";
+    }
   });
 
   it("binds a session to the agent when it opens, and forgets it on archive", async () => {
-    const out = await create();
+    const out = await create({ PASEO_GITHUB_PROXY: "on" });
     const capability = out.env.PASEO_GITHUB_PROXY_CAPABILITY;
     await before.get("agent.session_open")!({ request: { agentId: "a1", env: { PASEO_GITHUB_PROXY_CAPABILITY: capability } } }, {});
     const url = out.env.PASEO_GITHUB_PROXY_URL;

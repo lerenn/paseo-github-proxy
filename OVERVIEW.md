@@ -2,7 +2,7 @@ GitHub proxy routes every agent's GitHub access through the daemon. Agents get n
 
 Responses are cached with conditional requests, so repeated reads of the same pull request or check run cost little or nothing against the limit. Requests have priorities, and the plugin backs off on both primary and secondary rate limits.
 
-When an agent is created, the plugin removes `GH_TOKEN`, `GITHUB_TOKEN` and any GitHub MCP server from its configuration, denies the real `gh` command, and adds the proxy's MCP tools plus a `gh`-compatible command for reads such as `gh pr view`, `gh pr checks` and `gh api`. To keep normal GitHub access for one agent, create it with `PASEO_GITHUB_PROXY=off` in its environment.
+With the lockout scope set to opt-in (the default), only agents created with `PASEO_GITHUB_PROXY=on` in their environment are affected, and every other agent is left untouched. Set the scope to all to cover every new agent, with `PASEO_GITHUB_PROXY=off` as the per-agent opt-out. For an affected agent, the plugin removes `GH_TOKEN`, `GITHUB_TOKEN` and any GitHub MCP server from its configuration, denies the real `gh` command, and adds the proxy's MCP tools plus a `gh`-compatible command for reads such as `gh pr view`, `gh pr checks` and `gh api`. 
 
 Agents can also subscribe to events, for example checks finished on a pull request, a review submitted, a merge, or a new comment, with a timeout. The plugin sends the agent a prompt when the event or the timeout arrives. Events come from GitHub's webhook forwarder over an outbound websocket, with slow polling as a safety net.
 

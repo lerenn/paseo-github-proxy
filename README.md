@@ -23,8 +23,10 @@ It is a generic rebuild of the github-proxy service used in the Gas City.
   daemon at mode 0600 and never read back.
 - Agent access: injected MCP tools (Claude and Codex) and a `gh`-compatible shim for reads.
   Both are added at agent creation by a `before("agent.create")` hook.
-- Lockout by default: new agents lose `GH_TOKEN`, `GITHUB_TOKEN` and any GitHub MCP server, and the
-  real `gh` is denied. An agent opts out with `PASEO_GITHUB_PROXY=off` in its environment.
+- Lockout, scoped by the "Lockout scope" setting. `opt-in` (default): only agents created with
+  `PASEO_GITHUB_PROXY=on` lose `GH_TOKEN`, `GITHUB_TOKEN` and any GitHub MCP server, get the shim
+  and the proxy tools; every other agent is left exactly as it is. `all`: every new agent is locked
+  out unless it sets `PASEO_GITHUB_PROXY=off`.
 - Writes: comments, PR creation, labels and review requests are allowed; merges and admin calls are
   refused by default. Per-repo allow and deny lists. Refused writes never reach GitHub and are audited.
 - Events: `github_subscribe` wakes the agent with a prompt on checks finished, review submitted, PR merged or closed, new comment, or a timeout. Webhook forwarder for latency, ETag polling (60 s or slower) as the safety net. See [docs/subscriptions.md](docs/subscriptions.md).
@@ -46,7 +48,8 @@ gets a capability token that only identifies it to that endpoint; it carries no 
   MCP tools.
 - Lockout: `GH_TOKEN`, `GITHUB_TOKEN` and the enterprise variants are set empty, `GH_CONFIG_DIR`
   points at an empty directory, and MCP servers that look like GitHub (by name, URL or command) are
-  removed. `PASEO_GITHUB_PROXY=off` in the creation environment skips all of this.
+  removed. Whether an agent gets any of this depends on the lockout scope: `PASEO_GITHUB_PROXY=on`
+  opts in under `opt-in`, `=off` opts out under `all`.
 - Linux and macOS only (the shim is a `#!/usr/bin/env node` script, so Node must be on `PATH`).
 
 ## Write policy

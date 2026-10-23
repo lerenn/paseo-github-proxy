@@ -65,6 +65,16 @@ describe("applyLockout", () => {
     }
   });
 
+  it("under scope opt-in, touches only agents created with PASEO_GITHUB_PROXY=on", () => {
+    const scoped = { ...opts, scope: "opt-in" as const };
+    expect(applyLockout(base({ env: { GH_TOKEN: "mine" } }), scoped)).toBeUndefined();
+    expect(applyLockout(base(), scoped)).toBeUndefined();
+    expect(applyLockout(base({ env: { PASEO_GITHUB_PROXY: "off" } }), scoped)).toBeUndefined();
+    const out = applyLockout(base({ env: { PASEO_GITHUB_PROXY: "on", GH_TOKEN: "x" } }), scoped)!;
+    expect(out.env!.GH_TOKEN).toBe("");
+    expect(out.config.mcpServers![SERVER_NAME]).toBeDefined();
+  });
+
   it("does not treat its own server as a GitHub MCP", () => {
     expect(isGithubMcp(SERVER_NAME, { type: "http", url: "http://127.0.0.1/mcp" })).toBe(false);
   });

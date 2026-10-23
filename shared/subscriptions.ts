@@ -13,6 +13,12 @@ export const proxySettings = defineSettings({
   scope: "host",
   version: 1,
   schema: z.object({
+    /**
+     * Which new agents get the proxy injection and the GitHub lockout. "opt-in": only agents
+     * created with PASEO_GITHUB_PROXY=on; all others are untouched. "all": every agent, unless
+     * it sets PASEO_GITHUB_PROXY=off.
+     */
+    lockoutScope: z.enum(["opt-in", "all"]).default("opt-in"),
     /** "auto" opens a webhook forwarder for each watched repository when the token allows it. */
     webhooks: z.enum(["auto", "off"]).default("auto"),
     /** Polling interval for watched pull requests while no forwarder is healthy. */

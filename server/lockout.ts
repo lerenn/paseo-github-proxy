@@ -1,5 +1,5 @@
 import type { PluginBeforeRequests } from "@getpaseo/plugin/server";
-import { isOptedOut, PROXY_ENV } from "../shared/plugin";
+import { PROXY_ENV, lockoutApplies, type LockoutScope } from "../shared/plugin";
 import { PREAPPROVED_TOOL_NAMES } from "./tools";
 
 type CreateRequest = PluginBeforeRequests["agent.create"];
@@ -23,6 +23,8 @@ export interface LockoutOptions {
   emptyGhConfigDir: string;
   /** PATH to extend when the request does not set one. */
   inheritedPath?: string;
+  /** Which agents are locked out. Defaults to every agent that did not opt out. */
+  scope?: LockoutScope;
 }
 
 /** True for an MCP server that gives GitHub access (by name, URL, or launch command). */
@@ -36,10 +38,10 @@ export function isGithubMcp(name: string, server: McpServers[string]): boolean {
 /**
  * Lockout by default: remove GitHub credentials and GitHub MCP servers from the new agent, shadow
  * `gh` with the proxy shim, and give the agent the proxy's MCP tools. Returns undefined (no change)
- * when the agent opted out with PASEO_GITHUB_PROXY=off.
+ * when the scope does not cover the agent (opted out with PASEO_GITHUB_PROXY=off, or not opted in under `opt-in`).
  */
 export function applyLockout(request: CreateRequest, o: LockoutOptions): CreateRequest | undefined {
-  if (isOptedOut(request.env)) return undefined;
+  if (!lockoutApplies(o.scope ?? "all", request.env)) return undefined;
 
   const mcpServers: McpServers = {};
   const removed = new Set<string>();
