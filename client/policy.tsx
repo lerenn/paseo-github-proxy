@@ -52,16 +52,16 @@ export function PolicyPanel({ styles }: { styles: Record<string, any> }) {
 
   return (
     <View style={styles.panel}>
-      <Text style={styles.heading}>Write policy</Text>
+      <Text style={styles.heading}>What agents may write to GitHub</Text>
       <Text style={styles.muted}>
-        What agents may write to GitHub. Anything not allowed is refused before it reaches GitHub and recorded below. A deny always
-        wins. Operations: {OPERATIONS.join(", ")}.
+        Anything not allowed here is refused before it reaches GitHub and recorded in the write log. Allowed by default: comment,
+        pr.create, label, review.request. "Denied" always wins. Possible operations: {OPERATIONS.join(", ")}.
       </Text>
       {settings.status === "invalid" || settings.status === "error" ? <Text style={styles.error}>{settings.error}</Text> : null}
       {allow !== null ? (
         <>
-          <SettingsInput label="Allowed everywhere" hint="Comma-separated operations." initialValue={allow} onChangeText={setAllow} />
-          <SettingsInput label="Denied everywhere" hint="Comma-separated. Beats every allow." initialValue={deny} onChangeText={setDeny} />
+          <SettingsInput label="Allowed in every repository" hint="Comma-separated operations." initialValue={allow} onChangeText={setAllow} />
+          <SettingsInput label="Denied in every repository" hint="Comma-separated. Beats every allow." initialValue={deny} onChangeText={setDeny} />
           {rules.map((r) => (
             <View key={r.id} style={styles.card}>
               <SettingsInput label="Repository" hint="owner/name, owner/* or *. For example anyshift-io/tf-aws." initialValue={r.repo} onChangeText={(repo) => edit(r.id, { repo })} />
@@ -87,7 +87,7 @@ export function AuditPanel({ styles }: { styles: Record<string, any> }) {
   const query = useQuery({ queryKey: ["github-proxy", "audit"], queryFn: () => audit({ limit: 50 }), refetchInterval: 30_000 });
   return (
     <View style={styles.panel}>
-      <Text style={styles.heading}>Recent writes</Text>
+      <Text style={styles.heading}>Write log</Text>
       {query.data?.entries.length === 0 ? <Text style={styles.muted}>No write attempts yet.</Text> : null}
       {query.data?.entries.map((e, i) => (
         <View key={`${e.at}-${i}`} style={styles.field}>

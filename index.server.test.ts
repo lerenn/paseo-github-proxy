@@ -78,6 +78,11 @@ describe("plugin wiring", () => {
     expect(out).toEqual({ subscriptions: [], forwarders: [] });
   });
 
+  it("serves the activity list", async () => {
+    const out = await rpcs.get("github-proxy.activity")!({ limit: 10 }, { paseo: {} });
+    expect(Array.isArray(out.entries)).toBe(true);
+  });
+
   it("ignores session opens without a capability", async () => {
     expect(await before.get("agent.session_open")!({ request: { agentId: "a2", env: {} } }, {})).toBeUndefined();
   });

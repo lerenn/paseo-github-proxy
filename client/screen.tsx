@@ -1,117 +1,241 @@
-import { useRpc, type PluginScreenProps } from "@getpaseo/plugin/client";
+import { useRpc, useSettings, type PluginScreenProps } from "@getpaseo/plugin/client";
 import { SettingsInput } from "@getpaseo/plugin/client/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
-import { AuditPanel, PolicyPanel } from "./policy";
-import { SubscriptionsPanel } from "./subscriptions";
 import type { ResourceBudget } from "../shared/budget";
-import { clearTokenRpc, refreshBudgetRpc, setTokenRpc, statusRpc, type OwnerStatus } from "../shared/rpc";
+import {
+  activityRpc, clearTokenRpc, refreshBudgetRpc, setTokenRpc, statusRpc, subscriptionsRpc, type OwnerStatus,
+} from "../shared/rpc";
+import { describeSubscription, statusLine } from "../shared/summary";
+import { proxySettings } from "../shared/subscriptions";
+import { AuditPanel, PolicyPanel } from "./policy";
+import { ForwarderList, SUBSCRIPTIONS_KEY, WakeUpSettings } from "./subscriptions";
 
 const STATUS_KEY = ["github-proxy", "status"];
+const ACTIVITY_KEY = ["github-proxy", "activity"];
 
 export function ProxyScreen({ theme, layout }: PluginScreenProps) {
   const styles = useMemo(() => makeStyles(theme, layout.compact), [theme, layout.compact]);
   const queryClient = useQueryClient();
   const status = useRpc(statusRpc);
-  const refresh = useRpc(refreshBudgetRpc);
-  // The status call only reads the daemon's own counters; GitHub is asked only on Refresh.
+  const settings = useSettings(proxySettings);
+  // Reading status only looks at the daemon's own counters. GitHub is asked only on Refresh.
   const query = useQuery({ queryKey: STATUS_KEY, queryFn: () => status({}), refetchInterval: 15_000 });
-  const refreshMutation = useMutation({
-    mutationFn: () => refresh({}),
-    onSuccess: (data) => queryClient.setQueryData(STATUS_KEY, data),
-  });
   const reload = () => queryClient.invalidateQueries({ queryKey: STATUS_KEY });
+  const owners = query.data?.owners ?? [];
+  const scope = settings.status === "ready" ? settings.values.lockoutScope : null;
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <View style={styles.row}>
-        <Text style={styles.title}>GitHub proxy</Text>
-        <Button styles={styles} label={refreshMutation.isPending ? "Refreshing…" : "Refresh budget"} onPress={() => refreshMutation.mutate()} />
-      </View>
-      <Text style={styles.muted}>
-        Agents never see these tokens. The daemon makes every GitHub call with them and shares one rate-limit budget per token.
+      <Text style={styles.title}>GitHub proxy</Text>
+      <Text style={styles.statusLine} accessibilityRole="header">
+        {query.data ? statusLine({ running: Boolean(query.data.endpoint.url), owners, scope }) : "Loading…"}
       </Text>
       {query.data?.endpoint.error ? <Text style={styles.error}>{query.data.endpoint.error}</Text> : null}
       {query.error ? <Text style={styles.error}>{(query.error as Error).message}</Text> : null}
-      {refreshMutation.error ? <Text style={styles.error}>{(refreshMutation.error as Error).message}</Text> : null}
-      {query.data?.owners.length === 0 ? <Text style={styles.muted}>No tokens yet. Add one per GitHub owner or organization.</Text> : null}
-      {query.data?.owners.map((o) => <OwnerCard key={o.owner} owner={o} styles={styles} onChanged={reload} />)}
-      <AddOwner styles={styles} onChanged={reload} />
-      <SubscriptionsPanel styles={styles} />
-      <PolicyPanel styles={styles} />
-      <AuditPanel styles={styles} />
-      {query.data ? (
-        <Text style={styles.muted}>
-          Cache: {query.data.cache.entries} entries, {query.data.cache.hits} revalidated without cost, {query.data.cache.misses} fetched.
-        </Text>
-      ) : null}
+
+      <Tokens owners={owners} styles={styles} onChanged={reload} />
+      <WhoUsesTheProxy styles={styles} />
+      <Activity styles={styles} />
+      <Advanced styles={styles} owners={owners} cache={query.data?.cache} endpoint={query.data?.endpoint.url ?? null} onChanged={reload} />
     </ScrollView>
   );
 }
 
-function OwnerCard({ owner, styles, onChanged }: { owner: OwnerStatus; styles: Styles; onChanged(): void }) {
-  const clear = useRpc(clearTokenRpc);
-  const [error, setError] = useState<string | null>(null);
-  const b = owner.budget;
+function Section({ title, hint, styles, children }: { title: string; hint?: string; styles: Styles; children: React.ReactNode }) {
   return (
-    <View style={styles.card}>
-      <View style={styles.row}>
-        <Text style={styles.name}>{owner.owner}</Text>
-        <Text style={styles.badge}>token set</Text>
-      </View>
-      {owner.sharesBudgetWith.length > 0 ? <Text style={styles.muted}>Same token as {owner.sharesBudgetWith.join(", ")}: one shared budget.</Text> : null}
-      {b.resources.map((r) => <Text key={r.resource} style={styles.value}>{formatBudget(r)}</Text>)}
-      <Text style={styles.muted}>{b.inFlight} in flight, {b.queued} queued</Text>
-      {b.pausedUntil ? <Text style={styles.error}>Paused until {new Date(b.pausedUntil).toLocaleTimeString()}: {b.pauseReason}</Text> : null}
-      {owner.error ? <Text style={styles.error}>{owner.error}</Text> : null}
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Button
-        styles={styles}
-        label="Remove token"
-        onPress={() => clear({ owner: owner.owner }).then(onChanged, (e) => setError((e as Error).message))}
-      />
+    <View style={styles.panel}>
+      <Text style={styles.heading}>{title}</Text>
+      {hint ? <Text style={styles.muted}>{hint}</Text> : null}
+      {children}
     </View>
   );
 }
 
-/** Write-only: the token field is never filled from storage. */
-function AddOwner({ styles, onChanged }: { styles: Styles; onChanged(): void }) {
+function Tokens({ owners, styles, onChanged }: { owners: OwnerStatus[]; styles: Styles; onChanged(): void }) {
+  return (
+    <Section
+      title="Tokens"
+      styles={styles}
+      hint="A GitHub token lets the proxy read and write on GitHub for your agents, so the agents never hold one. Add one per GitHub owner or organization. It is saved on this machine and never shown again."
+    >
+      {owners.length === 0 ? <Text style={styles.muted}>No tokens yet.</Text> : null}
+      {owners.map((o) => <TokenRow key={o.owner} owner={o} styles={styles} onChanged={onChanged} />)}
+      <TokenEditor styles={styles} onSaved={onChanged} />
+    </Section>
+  );
+}
+
+function TokenRow({ owner, styles, onChanged }: { owner: OwnerStatus; styles: Styles; onChanged(): void }) {
+  const clear = useRpc(clearTokenRpc);
+  const [replacing, setReplacing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <View style={styles.field}>
+      <View style={styles.row}>
+        <Text style={styles.name}>{owner.owner}</Text>
+        <Text style={styles.badge}>{owner.error ? "Not working" : "Set"}</Text>
+        <View style={styles.row}>
+          <Button styles={styles} label={replacing ? "Cancel" : "Replace"} onPress={() => setReplacing((v) => !v)} />
+          <Button styles={styles} label="Remove" onPress={() => clear({ owner: owner.owner }).then(onChanged, (e) => setError((e as Error).message))} />
+        </View>
+      </View>
+      {owner.error ? <Text style={styles.error}>{owner.error}</Text> : null}
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {replacing ? <TokenEditor styles={styles} fixedOwner={owner.owner} onSaved={() => { setReplacing(false); onChanged(); }} /> : null}
+    </View>
+  );
+}
+
+/** Write-only: the field is never filled from storage. Without `fixedOwner` it also asks for the owner. */
+function TokenEditor({ styles, fixedOwner, onSaved }: { styles: Styles; fixedOwner?: string; onSaved(): void }) {
   const setToken = useRpc(setTokenRpc);
   const [owner, setOwner] = useState("");
   const [token, setTokenValue] = useState("");
   const [nonce, setNonce] = useState(0);
+  const who = fixedOwner ?? owner;
   const save = useMutation({
-    mutationFn: () => setToken({ owner, token }),
+    mutationFn: () => setToken({ owner: who, token }),
     onSuccess: () => {
       setOwner("");
       setTokenValue("");
       setNonce((n) => n + 1);
-      onChanged();
+      onSaved();
     },
   });
   return (
-    <View key={nonce} style={styles.panel}>
-      <Text style={styles.heading}>Add or replace a token</Text>
-      <SettingsInput label="Owner or organization" hint="For example anyshift-io or lerenn. Replaces the existing token for that owner." initialValue="" onChangeText={setOwner} />
-      <SettingsInput
-        label="Token"
-        hint="Checked against GitHub when saved. Stored on the daemon in a file only its user can read, and never shown again."
-        initialValue=""
-        secureTextEntry
-        onChangeText={setTokenValue}
-        placeholder="Paste token"
-      />
+    <View key={nonce} style={styles.editor}>
+      {fixedOwner ? null : <SettingsInput label="Add a token for owner" hint="For example lerenn or anyshift-io" initialValue="" onChangeText={setOwner} />}
+      <SettingsInput label={fixedOwner ? `New token for ${fixedOwner}` : "Token"} initialValue="" secureTextEntry onChangeText={setTokenValue} placeholder="Paste token" />
       {save.error ? <Text style={styles.error}>{(save.error as Error).message}</Text> : null}
-      <Button styles={styles} primary label={save.isPending ? "Checking…" : "Save token"} onPress={() => owner && token && save.mutate()} />
+      <Button styles={styles} primary label={save.isPending ? "Checking with GitHub…" : "Save token"} onPress={() => who && token && save.mutate()} />
+    </View>
+  );
+}
+
+function WhoUsesTheProxy({ styles }: { styles: Styles }) {
+  const settings = useSettings(proxySettings);
+  if (settings.status !== "ready") {
+    return (
+      <Section title="Who uses the proxy" styles={styles}>
+        <Text style={styles.muted}>{settings.status === "loading" ? "Loading…" : settings.error}</Text>
+      </Section>
+    );
+  }
+  const current = settings.values.lockoutScope;
+  const choose = (lockoutScope: "opt-in" | "all") => void settings.save({ ...settings.values, lockoutScope }, settings.revision);
+  return (
+    <Section title="Who uses the proxy" styles={styles}>
+      <Choice
+        styles={styles}
+        selected={current === "opt-in"}
+        title="Only agents that ask for it (PASEO_GITHUB_PROXY=on)"
+        text="These agents lose their own GitHub token and use the proxy instead. Every other agent is left exactly as it is."
+        onPress={() => choose("opt-in")}
+      />
+      <Choice
+        styles={styles}
+        selected={current === "all"}
+        title="All new agents"
+        text="Every new agent loses its own GitHub token and uses the proxy, unless it is created with PASEO_GITHUB_PROXY=off."
+        onPress={() => choose("all")}
+      />
+      {settings.saveError ? <Text style={styles.error}>{settings.saveError}</Text> : null}
+    </Section>
+  );
+}
+
+function Choice({ styles, selected, title, text, onPress }: { styles: Styles; selected: boolean; title: string; text: string; onPress(): void }) {
+  return (
+    <Pressable accessibilityRole="radio" accessibilityState={{ selected }} accessibilityLabel={title} onPress={onPress} style={[styles.choice, selected && styles.choiceSelected]}>
+      <Text style={styles.name}>{selected ? "● " : "○ "}{title}</Text>
+      <Text style={styles.muted}>{text}</Text>
+    </Pressable>
+  );
+}
+
+function Activity({ styles }: { styles: Styles }) {
+  const activity = useRpc(activityRpc);
+  const subscriptions = useRpc(subscriptionsRpc);
+  const calls = useQuery({ queryKey: ACTIVITY_KEY, queryFn: () => activity({ limit: 10 }), refetchInterval: 10_000 });
+  const subs = useQuery({ queryKey: SUBSCRIPTIONS_KEY, queryFn: () => subscriptions({}), refetchInterval: 15_000 });
+  const waiting = subs.data?.subscriptions.filter((s) => s.status === "active") ?? [];
+  return (
+    <Section title="Activity" styles={styles}>
+      <Text style={styles.label}>Latest requests</Text>
+      {calls.data?.entries.length === 0 ? <Text style={styles.muted}>Nothing yet. Agents' requests appear here.</Text> : null}
+      {calls.data?.entries.map((e, i) => (
+        <View key={`${e.at}-${i}`} style={styles.field}>
+          <Text style={styles.value}>{e.text}</Text>
+          <Text style={styles.muted}>{new Date(e.at).toLocaleTimeString()}{e.outcome === "refused" ? " · nothing was sent to GitHub" : ""}</Text>
+          {e.detail ? <Text style={styles.muted}>{e.detail}</Text> : null}
+        </View>
+      ))}
+      <Text style={styles.label}>Agents waiting for something</Text>
+      {waiting.length === 0 ? <Text style={styles.muted}>No agent is waiting.</Text> : null}
+      {waiting.map((s) => <Text key={s.id} style={styles.value}>{describeSubscription(s)}</Text>)}
+    </Section>
+  );
+}
+
+function Advanced({ styles, owners, cache, endpoint, onChanged }: { styles: Styles; owners: OwnerStatus[]; cache?: { entries: number; hits: number; misses: number }; endpoint: string | null; onChanged(): void }) {
+  const [open, setOpen] = useState(false);
+  const queryClient = useQueryClient();
+  const refresh = useRpc(refreshBudgetRpc);
+  const refreshMutation = useMutation({
+    mutationFn: () => refresh({}),
+    onSuccess: (data) => queryClient.setQueryData(STATUS_KEY, data),
+  });
+  return (
+    <View style={styles.panel}>
+      <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} accessibilityLabel="Advanced" onPress={() => setOpen((v) => !v)}>
+        <Text style={styles.heading}>{open ? "▾ Advanced" : "▸ Advanced"}</Text>
+      </Pressable>
+      {open ? (
+        <View style={styles.advanced}>
+          <PolicyPanel styles={styles} />
+          <AuditPanel styles={styles} />
+
+          <View style={styles.panel}>
+            <View style={styles.row}>
+              <Text style={styles.heading}>Request budget per token</Text>
+              <Button styles={styles} label={refreshMutation.isPending ? "Refreshing…" : "Refresh from GitHub"} onPress={() => refreshMutation.mutate()} />
+            </View>
+            <Text style={styles.muted}>Background work and low-priority requests wait first when the budget runs low. Refreshing asks GitHub for the real numbers and does not use any budget.</Text>
+            {refreshMutation.error ? <Text style={styles.error}>{(refreshMutation.error as Error).message}</Text> : null}
+            {owners.map((o) => (
+              <View key={o.owner} style={styles.field}>
+                <Text style={styles.name}>{o.owner}</Text>
+                {o.sharesBudgetWith.length ? <Text style={styles.muted}>Same token as {o.sharesBudgetWith.join(", ")}: one shared budget.</Text> : null}
+                {o.budget.resources.map((r) => <Text key={r.resource} style={styles.value}>{formatBudget(r)}</Text>)}
+                <Text style={styles.muted}>{o.budget.inFlight} running, {o.budget.queued} waiting</Text>
+                {o.budget.pausedUntil ? <Text style={styles.error}>Paused until {new Date(o.budget.pausedUntil).toLocaleTimeString()}: {o.budget.pauseReason}</Text> : null}
+              </View>
+            ))}
+            {cache ? <Text style={styles.muted}>Saved answers: {cache.entries}. {cache.hits} reused without using budget, {cache.misses} fetched.</Text> : null}
+          </View>
+
+          <View style={styles.panel}>
+            <Text style={styles.heading}>Waking agents up</Text>
+            <ForwarderList styles={styles} />
+            <WakeUpSettings styles={styles} />
+          </View>
+
+          <Text style={styles.muted}>
+            The proxy listens on {endpoint ?? "no address (it could not start)"} on this machine only. To change the port, set GITHUB_PROXY_PORT for the daemon and recreate agents.
+          </Text>
+        </View>
+      ) : null}
     </View>
   );
 }
 
 function formatBudget(r: ResourceBudget): string {
-  if (r.remaining === null || r.limit === null) return `${r.resource}: not observed yet`;
-  const reset = r.resetAt ? `, resets ${new Date(r.resetAt).toLocaleTimeString()}` : "";
-  return `${r.resource}: ${r.remaining} of ${r.limit} left${reset}`;
+  const name = r.resource === "core" ? "Standard requests" : r.resource === "graphql" ? "GraphQL requests" : "Search requests";
+  if (r.remaining === null || r.limit === null) return `${name}: not known yet`;
+  const reset = r.resetAt ? `, refills ${new Date(r.resetAt).toLocaleTimeString()}` : "";
+  return `${name}: ${r.remaining.toLocaleString("en-US")} of ${r.limit.toLocaleString("en-US")} left${reset}`;
 }
 
 function Button({ styles, label, onPress, primary }: { styles: Styles; label: string; onPress(): void; primary?: boolean }) {
@@ -128,17 +252,25 @@ function makeStyles(theme: PluginScreenProps["theme"], compact: boolean) {
   const pad = compact ? 16 : 24;
   return {
     screen: { flex: 1, backgroundColor: theme.colors.surface0 },
-    content: { padding: pad, gap: 12 },
+    content: { padding: pad, gap: 14 },
     row: { flexDirection: "row" as const, alignItems: "center" as const, justifyContent: "space-between" as const, gap: 8, flexWrap: "wrap" as const },
     title: { color: theme.colors.foreground, fontSize: compact ? 20 : 24 },
+    statusLine: { color: theme.colors.foreground, fontSize: compact ? 14 : 16 },
     heading: { color: theme.colors.foreground, fontSize: 16, fontWeight: "600" as const },
     name: { color: theme.colors.foreground, fontSize: 15, fontWeight: "600" as const },
+    label: { color: theme.colors.foregroundMuted, fontSize: 12, marginTop: 4 },
     muted: { color: theme.colors.foregroundMuted, fontSize: 13 },
     value: { color: theme.colors.foreground, fontSize: 14 },
     error: { color: theme.colors.foregroundMuted, fontSize: 13, fontStyle: "italic" as const },
     badge: { color: theme.colors.foregroundMuted, fontSize: 12, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
-    card: { gap: 4, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.surface1 },
     panel: { gap: 10, padding: 14, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.surface1 },
+    card: { gap: 4, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.surface1 },
+    advanced: { gap: 14 },
+    field: { gap: 2 },
+    editor: { gap: 8, paddingTop: 6 },
+    startBox: { gap: 8, paddingTop: 10, borderTopWidth: 1, borderTopColor: theme.colors.border },
+    choice: { gap: 2, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border },
+    choiceSelected: { borderColor: theme.colors.accent },
     button: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, borderWidth: 1, borderColor: theme.colors.border, alignSelf: "flex-start" as const },
     buttonPrimary: { backgroundColor: theme.colors.accent, borderColor: theme.colors.accent },
     buttonText: { color: theme.colors.foreground, fontSize: 14 },

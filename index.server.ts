@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import type { PluginHookContext, PluginServerContext } from "@getpaseo/plugin/server";
 import { Forwarders, targetsOf } from "./server/forwarder";
+import { CallLog, recentActivity } from "./server/activity";
 import { GitHubClient } from "./server/github";
 import { ProxyHttp } from "./server/http";
 import { applyLockout, CAPABILITY_ENV } from "./server/lockout";
@@ -17,7 +18,7 @@ import { WriteGate } from "./server/write";
 import { TokenStore } from "./server/tokens";
 import { lockoutApplies } from "./shared/plugin";
 import { policySchema, policySettings } from "./shared/policy";
-import { auditRpc, cancelSubscriptionRpc, clearTokenRpc, refreshBudgetRpc, setTokenRpc, statusRpc, subscriptionsRpc } from "./shared/rpc";
+import { activityRpc, auditRpc, cancelSubscriptionRpc, clearTokenRpc, refreshBudgetRpc, setTokenRpc, statusRpc, subscriptionsRpc } from "./shared/rpc";
 import { proxySettings } from "./shared/subscriptions";
 
 const DEFAULT_PORT = 47821;
@@ -25,7 +26,8 @@ const home = path.join(homedir(), ".paseo", "github-proxy");
 
 export default function contribute(server: PluginServerContext) {
   const tokens = new TokenStore();
-  const client = new GitHubClient({ tokens });
+  const callLog = new CallLog();
+  const client = new GitHubClient({ tokens, calls: callLog });
   const sessions = new SessionStore();
   const settings = server.registerSettings(policySettings);
   const audit = new AuditLog();
@@ -141,6 +143,7 @@ export default function contribute(server: PluginServerContext) {
     capture(ctx);
     return service.status();
   });
+  server.handle(activityRpc, ({ limit }) => ({ entries: recentActivity(callLog.all(), audit.recent(200), limit) }));
   server.handle(auditRpc, ({ limit }) => ({ entries: audit.recent(limit) }));
   server.handle(refreshBudgetRpc, () => service.refresh());
   server.handle(setTokenRpc, async ({ owner, token }) => {
