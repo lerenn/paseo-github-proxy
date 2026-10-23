@@ -27,7 +27,7 @@ export function ProxyScreen({ theme, layout }: PluginScreenProps) {
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>GitHub proxy</Text>
+      <Text style={styles.title}>GitHub Proxy</Text>
       <Text style={styles.statusLine} accessibilityRole="header">
         {query.data ? statusLine({ running: Boolean(query.data.endpoint.url), owners, scope }) : "Loading…"}
       </Text>

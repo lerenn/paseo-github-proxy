@@ -8,7 +8,7 @@ export const API = "https://api.github.com";
 
 export class NoTokenError extends Error {
   constructor(readonly owner: string) {
-    super(`No GitHub token for ${owner}. Add one in the GitHub proxy screen.`);
+    super(`No GitHub token for ${owner}. Add one in the GitHub Proxy screen.`);
     this.name = "NoTokenError";
   }
 }
