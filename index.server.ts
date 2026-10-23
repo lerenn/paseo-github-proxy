@@ -1,7 +1,8 @@
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
-import type { PluginServerContext } from "@getpaseo/plugin/server";
+import type { PluginHookContext, PluginServerContext } from "@getpaseo/plugin/server";
+import { Forwarders, targetsOf } from "./server/forwarder";
 import { GitHubClient } from "./server/github";
 import { ProxyHttp } from "./server/http";
 import { applyLockout, CAPABILITY_ENV } from "./server/lockout";
@@ -9,13 +10,15 @@ import { McpServer } from "./server/mcp";
 import { ProxyService } from "./server/service";
 import { SessionStore } from "./server/sessions";
 import { SHIM_SCRIPT } from "./server/shim-script";
+import { SubscriptionManager } from "./server/subscriptions";
 import { ALL_TOOLS } from "./server/tools";
 import { AuditLog } from "./server/audit";
 import { WriteGate } from "./server/write";
 import { TokenStore } from "./server/tokens";
 import { isOptedOut } from "./shared/plugin";
 import { policySchema, policySettings } from "./shared/policy";
-import { auditRpc, clearTokenRpc, refreshBudgetRpc, setTokenRpc, statusRpc } from "./shared/rpc";
+import { auditRpc, cancelSubscriptionRpc, clearTokenRpc, refreshBudgetRpc, setTokenRpc, statusRpc, subscriptionsRpc } from "./shared/rpc";
+import { proxySettings } from "./shared/subscriptions";
 
 const DEFAULT_PORT = 47821;
 const home = path.join(homedir(), ".paseo", "github-proxy");
@@ -35,7 +38,42 @@ export default function contribute(server: PluginServerContext) {
       return state.status === "ready" ? state.values : policySchema.parse({});
     },
   });
-  const http = new ProxyHttp({ client, sessions, mcp: new McpServer(ALL_TOOLS), write });
+  const proxy = server.registerSettings(proxySettings);
+
+  // The Paseo API only reaches a plugin through hook and RPC contexts. Keep the first one seen,
+  // and let wake-ups wait for it, so subscriptions work as soon as any hook or RPC has run.
+  let paseo: PluginHookContext["paseo"] | null = null;
+  let paseoReady!: () => void;
+  const hasPaseo = new Promise<void>((resolve) => (paseoReady = resolve));
+  const capture = (ctx: { paseo: PluginHookContext["paseo"] } | undefined) => {
+    if (ctx?.paseo && !paseo) {
+      paseo = ctx.paseo;
+      paseoReady();
+    }
+  };
+
+  const forwarders = new Forwarders({
+    client,
+    token: (owner) => tokens.get(owner),
+    onDelivery: (repo, delivery) => {
+      const { numbers, shas } = targetsOf(delivery);
+      if (numbers.length || shas.length) void subscriptions.hint(repo, numbers, shas);
+    },
+  });
+  const subscriptions: SubscriptionManager = new SubscriptionManager({
+    ctx: () => ({ client }),
+    settings: async () => {
+      const state = await proxy.read();
+      return state.status === "ready" ? state.values : proxySettings.schema.parse({});
+    },
+    forwarders,
+    send: async (agentId, text) => {
+      await Promise.race([hasPaseo, new Promise((_, reject) => setTimeout(() => reject(new Error("Paseo API not available yet")), 30_000))]);
+      await paseo!.agents.ref(agentId).send(text, { activeTurnBehavior: "steer" });
+    },
+  });
+  subscriptions.start();
+  const http = new ProxyHttp({ client, sessions, mcp: new McpServer(ALL_TOOLS), write, subscriptions });
 
   let url: string | null = null;
   let startError: string | null = null;
@@ -60,7 +98,8 @@ export default function contribute(server: PluginServerContext) {
     },
   );
 
-  const removeCreate = server.before("agent.create", async ({ request }) => {
+  const removeCreate = server.before("agent.create", async ({ request }, ctx) => {
+    capture(ctx);
     if (isOptedOut(request.env)) return;
     await started;
     // Refuse rather than leave the agent without the proxy and without its own GitHub access.
@@ -73,13 +112,29 @@ export default function contribute(server: PluginServerContext) {
       inheritedPath: process.env.PATH,
     });
   });
-  const removeOpen = server.before("agent.session_open", ({ request }) => {
+  const removeOpen = server.before("agent.session_open", ({ request }, ctx) => {
+    capture(ctx);
     const capability = request.env[CAPABILITY_ENV];
     if (capability) sessions.bind(capability, request.agentId);
   });
-  const removeArchived = server.on("agent.archived", ({ agent }) => sessions.forgetAgent(agent.id));
+  const removeArchived = server.on("agent.archived", ({ agent }, ctx) => {
+    capture(ctx);
+    sessions.forgetAgent(agent.id);
+    subscriptions.dropAgent(agent.id);
+  });
 
-  server.handle(statusRpc, () => service.status());
+  server.handle(subscriptionsRpc, (_input, ctx) => {
+    capture(ctx);
+    return { subscriptions: subscriptions.list().reverse(), forwarders: forwarders.views() };
+  });
+  server.handle(cancelSubscriptionRpc, ({ id }) => {
+    subscriptions.cancel(id);
+    return {};
+  });
+  server.handle(statusRpc, (_input, ctx) => {
+    capture(ctx);
+    return service.status();
+  });
   server.handle(auditRpc, ({ limit }) => ({ entries: audit.recent(limit) }));
   server.handle(refreshBudgetRpc, () => service.refresh());
   server.handle(setTokenRpc, async ({ owner, token }) => {
@@ -95,6 +150,8 @@ export default function contribute(server: PluginServerContext) {
     removeCreate();
     removeOpen();
     removeArchived();
+    subscriptions.stop();
+    await forwarders.stop();
     client.limiter.stop();
     await http.stop();
   };

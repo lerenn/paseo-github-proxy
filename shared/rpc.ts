@@ -2,6 +2,7 @@ import { defineRpc } from "@getpaseo/plugin";
 import { z } from "zod";
 import { auditEntrySchema } from "./audit";
 import { budgetSnapshotSchema } from "./budget";
+import { forwarderViewSchema, subscriptionViewSchema } from "./subscriptions";
 
 export const ownerStatusSchema = z.object({
   owner: z.string(),
@@ -58,4 +59,17 @@ export const auditRpc = defineRpc({
   name: "github-proxy.audit",
   input: z.object({ limit: z.number().int().min(1).max(500).default(100) }),
   output: z.object({ entries: z.array(auditEntrySchema) }),
+});
+
+/** Subscriptions (active ones and the most recent finished ones) and webhook forwarder state. */
+export const subscriptionsRpc = defineRpc({
+  name: "github-proxy.subscriptions",
+  input: z.object({}),
+  output: z.object({ subscriptions: z.array(subscriptionViewSchema), forwarders: z.array(forwarderViewSchema) }),
+});
+
+export const cancelSubscriptionRpc = defineRpc({
+  name: "github-proxy.cancel-subscription",
+  input: z.object({ id: z.string() }),
+  output: z.object({}),
 });

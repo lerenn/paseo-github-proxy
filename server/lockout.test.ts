@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyLockout, CAPABILITY_ENV, isGithubMcp, SERVER_NAME, URL_ENV } from "./lockout";
-import { READ_TOOL_NAMES } from "./tools";
+import { PREAPPROVED_TOOL_NAMES } from "./tools";
 
 const opts = { url: "http://127.0.0.1:47821", capability: "cap", binDir: "/bin-shim", emptyGhConfigDir: "/empty", inheritedPath: "/usr/bin" };
 const base = (over: object = {}) => ({ config: { provider: "claude", cwd: "/work" }, ...over }) as Parameters<typeof applyLockout>[0];
@@ -51,7 +51,7 @@ describe("applyLockout", () => {
   it("injects the proxy MCP server with the capability and preapproves the read tools", () => {
     const out = applyLockout(base(), opts)!;
     expect(out.config.mcpServers![SERVER_NAME]).toMatchObject({ type: "http", url: "http://127.0.0.1:47821/mcp", headers: { authorization: "Bearer cap" } });
-    expect(out.config.toolPolicy!.preapproved.map((t) => t.tool)).toEqual(READ_TOOL_NAMES);
+    expect(out.config.toolPolicy!.preapproved.map((t) => t.tool)).toEqual(PREAPPROVED_TOOL_NAMES);
     expect(out.config.systemPrompt).toContain("no GitHub token");
   });
 

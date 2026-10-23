@@ -1,6 +1,6 @@
 import type { PluginBeforeRequests } from "@getpaseo/plugin/server";
 import { isOptedOut, PROXY_ENV } from "../shared/plugin";
-import { READ_TOOL_NAMES } from "./tools";
+import { PREAPPROVED_TOOL_NAMES } from "./tools";
 
 type CreateRequest = PluginBeforeRequests["agent.create"];
 type McpServers = NonNullable<CreateRequest["config"]["mcpServers"]>;
@@ -78,7 +78,7 @@ export function applyLockout(request: CreateRequest, o: LockoutOptions): CreateR
       ...request.config,
       systemPrompt: [request.config.systemPrompt, note].filter(Boolean).join("\n\n"),
       mcpServers,
-      toolPolicy: { preapproved: [...preapproved, ...READ_TOOL_NAMES.map((tool) => ({ kind: "mcp" as const, server: SERVER_NAME, tool }))] },
+      toolPolicy: { preapproved: [...preapproved, ...PREAPPROVED_TOOL_NAMES.map((tool) => ({ kind: "mcp" as const, server: SERVER_NAME, tool }))] },
     },
     env,
   };

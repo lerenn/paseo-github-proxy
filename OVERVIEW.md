@@ -10,7 +10,7 @@ Agents can also subscribe to events, for example checks finished on a pull reque
 
 Open the GitHub proxy screen and add one token per GitHub owner or organization, for example `anyshift-io`. Tokens are write-only: the screen shows whether one is set but never displays it. They are stored on the daemon machine in a file readable only by its user. The screen also shows the remaining budget for each token.
 
-The webhook forwarder needs admin rights on the repository or organization, and GitHub allows one forwarder per repository. Without it, subscriptions rely on polling alone and are slower.
+The webhook forwarder needs admin rights on the repository, and GitHub allows one forwarder per repository. To use it the plugin creates a temporary webhook named `cli` on each watched repository, as `gh webhook forward` does, and removes it when nothing is watched. Without admin rights, or with webhooks turned off in the screen, subscriptions rely on polling alone, never faster than every 60 seconds, and are slower.
 
 ## Writes
 
