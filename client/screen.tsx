@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import type { ResourceBudget } from "../shared/budget";
 import {
-  activityRpc, clearTokenRpc, refreshBudgetRpc, setTokenRpc, statusRpc, subscriptionsRpc, type OwnerStatus,
+  activityRpc, clearTokenRpc, refreshBudgetRpc, setTokenRpc, statusRpc, subscriptionsRpc, type ActivityEntry, type OwnerStatus,
 } from "../shared/rpc";
 import { describeSubscription, statusLine } from "../shared/summary";
 import { proxySettings } from "../shared/subscriptions";
@@ -206,17 +206,35 @@ function Activity({ styles }: { styles: Styles }) {
     <Section title="Activity" styles={styles}>
       <Text style={styles.label}>Latest requests</Text>
       {calls.data?.entries.length === 0 ? <Text style={styles.muted}>Nothing yet. Agents' requests appear here.</Text> : null}
-      {calls.data?.entries.map((e, i) => (
-        <View key={`${e.at}-${i}`} style={styles.field}>
-          <Text style={styles.value}>{e.text}</Text>
-          <Text style={styles.muted}>{new Date(e.at).toLocaleTimeString()}{e.outcome === "refused" ? " · nothing was sent to GitHub" : ""}</Text>
-          {e.detail ? <Text style={styles.muted}>{e.detail}</Text> : null}
+      {calls.data?.entries.length ? (
+        <View style={styles.rows}>
+          {calls.data.entries.map((e, i) => <ActivityRow key={`${e.at}-${i}`} entry={e} first={i === 0} styles={styles} />)}
         </View>
-      ))}
+      ) : null}
       <Text style={styles.label}>Agents waiting for something</Text>
       {waiting.length === 0 ? <Text style={styles.muted}>No agent is waiting.</Text> : null}
       {waiting.map((s) => <Text key={s.id} style={styles.value}>{describeSubscription(s)}</Text>)}
     </Section>
+  );
+}
+
+const OUTCOME = { ok: "Done", failed: "Failed", refused: "Refused" } as const;
+
+/** One event as one line, tinted by outcome: green done, amber failed, red refused. */
+function ActivityRow({ entry, first, styles }: { entry: ActivityEntry; first: boolean; styles: Styles }) {
+  const tint = styles.outcome[entry.outcome];
+  const text = entry.outcome === "refused" ? entry.text.replace(/^Refused: /, "") : entry.text;
+  return (
+    <View style={[styles.activityRow, !first && styles.tokenRowDivider, { borderLeftColor: tint.color, backgroundColor: tint.background }]}>
+      <View style={styles.tokenLine}>
+        <View style={styles.tokenName}>
+          <Text style={[styles.badge, { color: tint.color, borderColor: tint.color }]}>{OUTCOME[entry.outcome]}</Text>
+          <Text style={[styles.value, styles.activityText]}>{text}</Text>
+        </View>
+        <Text style={styles.muted}>{new Date(entry.at).toLocaleTimeString()}</Text>
+      </View>
+      {entry.outcome === "refused" ? <Text style={styles.muted}>Nothing was sent to GitHub.{entry.detail ? ` ${entry.detail}` : ""}</Text> : null}
+    </View>
   );
 }
 
@@ -296,6 +314,11 @@ function Button({ styles, label, onPress, primary, small, disabled }: { styles: 
 
 type Styles = ReturnType<typeof makeStyles>;
 
+/** A faint tint of a status color for a row background; falls back when the color is not #rrggbb. */
+function wash(color: string, fallback: string): string {
+  return /^#[0-9a-f]{6}$/i.test(color) ? `${color}1a` : fallback;
+}
+
 function makeStyles(theme: PluginScreenProps["theme"], compact: boolean) {
   const pad = compact ? 16 : 24;
   return {
@@ -315,6 +338,13 @@ function makeStyles(theme: PluginScreenProps["theme"], compact: boolean) {
     card: { gap: 4, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.surface1 },
     advanced: { gap: 14 },
     field: { gap: 2 },
+    activityRow: { gap: 4, paddingVertical: 8, paddingHorizontal: 12, borderLeftWidth: 4 },
+    activityText: { flexShrink: 1 },
+    outcome: {
+      ok: { color: theme.colors.statusSuccess, background: wash(theme.colors.statusSuccess, theme.colors.surface0) },
+      failed: { color: theme.colors.statusWarning, background: wash(theme.colors.statusWarning, theme.colors.surface0) },
+      refused: { color: theme.colors.statusDanger, background: wash(theme.colors.statusDanger, theme.colors.surface0) },
+    },
     placeholder: { color: theme.colors.foregroundMuted },
     tokenList: { gap: 10, alignSelf: "stretch" as const },
     rows: { borderWidth: 1, borderColor: theme.colors.border, borderRadius: 10, backgroundColor: theme.colors.surface0 },
