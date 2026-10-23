@@ -316,7 +316,7 @@ function makeStyles(theme: PluginScreenProps["theme"], compact: boolean) {
     advanced: { gap: 14 },
     field: { gap: 2 },
     placeholder: { color: theme.colors.foregroundMuted },
-    tokenList: { gap: 10, maxWidth: 640, alignItems: "stretch" as const },
+    tokenList: { gap: 10, alignSelf: "stretch" as const },
     rows: { borderWidth: 1, borderColor: theme.colors.border, borderRadius: 10, backgroundColor: theme.colors.surface0 },
     tokenRow: { gap: 8, paddingVertical: 10, paddingHorizontal: 12 },
     tokenRowDivider: { borderTopWidth: 1, borderTopColor: theme.colors.border },
