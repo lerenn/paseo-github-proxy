@@ -42,12 +42,23 @@ export function ProxyScreen({ theme, layout }: PluginScreenProps) {
   );
 }
 
-function Section({ title, hint, styles, children }: { title: string; hint?: string; styles: Styles; children: React.ReactNode }) {
+/** A panel; with `collapsible` it starts closed behind a chevron header showing `summary`. */
+function Section({ title, hint, summary, collapsible, styles, children }: { title: string; hint?: string; summary?: string; collapsible?: boolean; styles: Styles; children: React.ReactNode }) {
+  const [open, setOpen] = useState(!collapsible);
   return (
     <View style={styles.panel}>
-      <Text style={styles.heading}>{title}</Text>
-      {hint ? <Text style={styles.muted}>{hint}</Text> : null}
-      {children}
+      {collapsible ? (
+        <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} accessibilityLabel={title} onPress={() => setOpen((v) => !v)}>
+          <Text style={styles.heading}>
+            {open ? "▾" : "▸"} {title}
+            {summary ? ` · ${summary}` : ""}
+          </Text>
+        </Pressable>
+      ) : (
+        <Text style={styles.heading}>{title}</Text>
+      )}
+      {open && hint ? <Text style={styles.muted}>{hint}</Text> : null}
+      {open ? children : null}
     </View>
   );
 }
@@ -57,6 +68,8 @@ function Tokens({ owners, styles, onChanged }: { owners: OwnerStatus[]; styles: 
   return (
     <Section
       title="Tokens"
+      collapsible
+      summary={`${owners.length} set`}
       styles={styles}
       hint="A GitHub token lets the proxy read and write on GitHub for your agents, so the agents never hold one. Add one per GitHub owner or organization. It is saved on this machine and never shown again."
     >
@@ -159,7 +172,7 @@ function WhoUsesTheProxy({ styles }: { styles: Styles }) {
   const settings = useSettings(proxySettings);
   if (settings.status !== "ready") {
     return (
-      <Section title="Who uses the proxy" styles={styles}>
+      <Section title="Who uses the proxy" collapsible styles={styles}>
         <Text style={styles.muted}>{settings.status === "loading" ? "Loading…" : settings.error}</Text>
       </Section>
     );
@@ -167,7 +180,7 @@ function WhoUsesTheProxy({ styles }: { styles: Styles }) {
   const current = settings.values.lockoutScope;
   const choose = (lockoutScope: "opt-in" | "all") => void settings.save({ ...settings.values, lockoutScope }, settings.revision);
   return (
-    <Section title="Who uses the proxy" styles={styles}>
+    <Section title="Who uses the proxy" collapsible summary={current === "all" ? "all new agents" : "opt-in"} styles={styles}>
       <Choice
         styles={styles}
         selected={current === "opt-in"}
@@ -203,7 +216,7 @@ function Activity({ styles }: { styles: Styles }) {
   const subs = useQuery({ queryKey: SUBSCRIPTIONS_KEY, queryFn: () => subscriptions({}), refetchInterval: 15_000 });
   const waiting = subs.data?.subscriptions.filter((s) => s.status === "active") ?? [];
   return (
-    <Section title="Activity" styles={styles}>
+    <Section title="Activity" collapsible summary={`${calls.data?.entries.length ?? 0} requests · ${waiting.length} waiting`} styles={styles}>
       <Text style={styles.label}>Latest requests</Text>
       {calls.data?.entries.length === 0 ? <Text style={styles.muted}>Nothing yet. Agents' requests appear here.</Text> : null}
       {calls.data?.entries.length ? (
