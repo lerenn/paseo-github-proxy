@@ -70,6 +70,13 @@ function SubscriptionSettings({ styles }: { styles: Record<string, any> }) {
   return (
     <View style={styles.startBox}>
       <SettingsSelect
+        label="Lockout scope"
+        hint="Opt-in: only agents created with PASEO_GITHUB_PROXY=on get the proxy tools and lose their GitHub token; all others are untouched. All: every new agent, unless it sets PASEO_GITHUB_PROXY=off."
+        value={v.lockoutScope}
+        options={[{ label: "Opt-in (PASEO_GITHUB_PROXY=on)", value: "opt-in" }, { label: "All agents", value: "all" }]}
+        onValueChange={(lockoutScope) => void save({ lockoutScope: lockoutScope as "opt-in" | "all" })}
+      />
+      <SettingsSelect
         label="Webhook forwarders"
         hint="Auto opens a forwarder for each watched repository when the token has admin rights there. It creates a temporary webhook named cli on the repository, like gh webhook forward."
         value={v.webhooks}

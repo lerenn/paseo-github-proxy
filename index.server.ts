@@ -15,7 +15,7 @@ import { ALL_TOOLS } from "./server/tools";
 import { AuditLog } from "./server/audit";
 import { WriteGate } from "./server/write";
 import { TokenStore } from "./server/tokens";
-import { isOptedOut } from "./shared/plugin";
+import { lockoutApplies } from "./shared/plugin";
 import { policySchema, policySettings } from "./shared/policy";
 import { auditRpc, cancelSubscriptionRpc, clearTokenRpc, refreshBudgetRpc, setTokenRpc, statusRpc, subscriptionsRpc } from "./shared/rpc";
 import { proxySettings } from "./shared/subscriptions";
@@ -52,6 +52,12 @@ export default function contribute(server: PluginServerContext) {
     }
   };
 
+  async function currentSettings() {
+    const state = await proxy.read();
+    // Unreadable settings fall back to the defaults, which are the narrowest lockout scope.
+    return state.status === "ready" ? state.values : proxySettings.schema.parse({});
+  }
+
   const forwarders = new Forwarders({
     client,
     token: (owner) => tokens.get(owner),
@@ -62,10 +68,7 @@ export default function contribute(server: PluginServerContext) {
   });
   const subscriptions: SubscriptionManager = new SubscriptionManager({
     ctx: () => ({ client }),
-    settings: async () => {
-      const state = await proxy.read();
-      return state.status === "ready" ? state.values : proxySettings.schema.parse({});
-    },
+    settings: currentSettings,
     forwarders,
     send: async (agentId, text) => {
       await Promise.race([hasPaseo, new Promise((_, reject) => setTimeout(() => reject(new Error("Paseo API not available yet")), 30_000))]);
@@ -100,16 +103,19 @@ export default function contribute(server: PluginServerContext) {
 
   const removeCreate = server.before("agent.create", async ({ request }, ctx) => {
     capture(ctx);
-    if (isOptedOut(request.env)) return;
+    const scope = (await currentSettings()).lockoutScope;
+    // Agents outside the scope are left exactly as they are.
+    if (!lockoutApplies(scope, request.env)) return;
     await started;
     // Refuse rather than leave the agent without the proxy and without its own GitHub access.
-    if (!url) throw new Error(`${startError} Create the agent with PASEO_GITHUB_PROXY=off to keep its own GitHub access.`);
+    if (!url) throw new Error(`${startError} Create the agent without PASEO_GITHUB_PROXY=on (or with =off under scope "all") to keep its own GitHub access.`);
     return applyLockout(request, {
       url,
       capability: sessions.create(request.config.cwd),
       binDir,
       emptyGhConfigDir,
       inheritedPath: process.env.PATH,
+      scope,
     });
   });
   const removeOpen = server.before("agent.session_open", ({ request }, ctx) => {
