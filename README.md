@@ -11,8 +11,8 @@ It is a generic rebuild of the github-proxy service used in the Gas City.
 
 | PR | Scope | State |
 | --- | --- | --- |
-| 1 | Skeleton, CI, docs | in progress |
-| 2 | Token settings, REST/GraphQL client, cache, rate limiter, screen | planned |
+| 1 | Skeleton, CI, docs | merged |
+| 2 | Token settings, REST/GraphQL client, cache, rate limiter, screen | in review |
 | 3 | MCP tools, `gh` shim, lockout hook | planned |
 | 4 | Write policy | planned |
 | 5 | Subscriptions: websocket, polling, timeouts | planned |
