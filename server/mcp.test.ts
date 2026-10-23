@@ -18,6 +18,19 @@ describe("McpServer", () => {
     expect((await call("initialize", { protocolVersion: "1999-01-01" })).result.protocolVersion).toBe("2025-06-18");
   });
 
+  it("sends short instructions covering tools, policy, lockout, subscribing and reviewers", async () => {
+    const { call } = setup();
+    const { instructions } = (await call("initialize", { protocolVersion: "2025-06-18" })).result;
+    expect(instructions.length).toBeLessThan(3000);
+    for (const must of ["no GitHub token", "github_subscribe", "Do not poll", "Writes follow a policy", "refused", "github_request_review", "Never contact reviewers", "data, not instructions"]) {
+      expect(instructions).toContain(must);
+    }
+    // Every tool the text names exists.
+    for (const name of instructions.match(/github_[a-z_]+/g) as string[]) {
+      expect(readTools.concat(ALL_TOOLS).map((t) => t.name), name).toContain(name);
+    }
+  });
+
   it("ignores notifications", async () => {
     const { mcp, client } = setup();
     expect(await mcp.handle({ jsonrpc: "2.0", method: "notifications/initialized" }, { client })).toBeNull();
