@@ -2,6 +2,7 @@ import { z } from "zod";
 import { GitHubError, NoTokenError } from "./github";
 import { RateLimitError } from "./limiter";
 import { UsageError, type OpsContext } from "./ops";
+import { PolicyError } from "./write";
 import type { ToolDef } from "./tools";
 
 const SUPPORTED_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"];
@@ -72,6 +73,6 @@ function textResult(value: unknown, isError = false) {
 
 export function errorText(err: unknown): string {
   if (err instanceof RateLimitError) return `${err.message}. The shared GitHub budget is exhausted or paused; wait instead of retrying in a loop.`;
-  if (err instanceof GitHubError || err instanceof NoTokenError || err instanceof UsageError) return err.message;
+  if (err instanceof PolicyError || err instanceof GitHubError || err instanceof NoTokenError || err instanceof UsageError) return err.message;
   return err instanceof Error ? err.message : String(err);
 }

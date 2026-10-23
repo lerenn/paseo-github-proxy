@@ -59,11 +59,11 @@ describe("McpServer", () => {
     expect(text(r)).toContain("Invalid arguments");
   });
 
-  it("refuses GraphQL mutations", async () => {
+  it("refuses GraphQL mutations when no write gate is available", async () => {
     const { call } = setup({ "/graphql": { data: {} } });
     const r = await call("tools/call", { name: "github_graphql", arguments: { owner: "acme", query: "mutation { addStar(input:{}) { clientMutationId } }" } });
     expect(r.result.isError).toBe(true);
-    expect(text(r)).toContain("mutations");
+    expect(text(r)).toContain("Writes are not available");
   });
 
   it("does not mistake a field named mutation_x or a comment for a mutation", async () => {

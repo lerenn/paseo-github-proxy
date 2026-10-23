@@ -13,8 +13,8 @@ It is a generic rebuild of the github-proxy service used in the Gas City.
 | --- | --- | --- |
 | 1 | Skeleton, CI, docs | merged |
 | 2 | Token settings, REST/GraphQL client, cache, rate limiter, screen | merged |
-| 3 | MCP tools, `gh` shim, lockout hook | in review |
-| 4 | Write policy | planned |
+| 3 | MCP tools, `gh` shim, lockout hook | merged |
+| 4 | Write policy | in review |
 | 5 | Subscriptions: websocket, polling, timeouts | planned |
 
 ## Design
@@ -48,6 +48,30 @@ gets a capability token that only identifies it to that endpoint; it carries no 
   points at an empty directory, and MCP servers that look like GitHub (by name, URL or command) are
   removed. `PASEO_GITHUB_PROXY=off` in the creation environment skips all of this.
 - Linux and macOS only (the shim is a `#!/usr/bin/env node` script, so Node must be on `PATH`).
+
+## Write policy
+
+Every write goes through one gate: classify the call, check the policy, audit, then send. Write
+tools: `github_comment`, `github_pr_create`, `github_label`, `github_request_review`,
+`github_pr_merge`, and the generic `github_write` and `github_graphql` (mutations). They are not
+pre-approved, so the agent's own permission mode still applies on top of the policy.
+
+- Operations: `comment`, `comment.delete`, `pr.create`, `pr.update`, `pr.close`, `pr.merge`, `label`,
+  `review.request`, `review.submit`, `issue.create`, `issue.update`, `branch.delete`, `admin`, `other`.
+- Default allow: `comment`, `pr.create`, `label`, `review.request`. Everything else is refused,
+  including anything the classifier does not recognize (`other`).
+- Rules per repository (`owner/name`, `owner/*`, `*`; case-insensitive) add allows and deny
+  operations. A deny from the defaults or any matching rule always wins. Example: allow `pr.merge`
+  on `anyshift-io/*` and deny it on `anyshift-io/tf-aws`.
+- A call may need several operations (closing a PR through the issues endpoint needs `issue.update`
+  and `pr.close`); all must be allowed.
+- GraphQL mutations address objects by id, so the repository is unknown. For them every repository
+  deny applies and only `*` rules can allow, which means a "never merge in tf-aws" rule also blocks
+  GraphQL merges everywhere unless merges are globally allowed and not denied by any rule.
+- Refused writes are never sent. Both outcomes are appended to `~/.paseo/github-proxy/audit.jsonl`
+  (mode 0600, one rotation at 5 MB) with agent, repo, operations, a short summary and the status.
+  Request bodies are not logged. The screen shows the latest entries.
+- The `gh` shim never writes.
 
 ## Development
 
