@@ -9,9 +9,10 @@ export class ProxyService {
   constructor(
     readonly client: GitHubClient,
     private readonly tokens: TokenStore,
+    private readonly endpoint: () => { url: string | null; error: string | null } = () => ({ url: null, error: null }),
   ) {}
 
-  status(): { owners: OwnerStatus[]; cache: ReturnType<GitHubClient["cache"]["stats"]> } {
+  status(): { owners: OwnerStatus[]; cache: ReturnType<GitHubClient["cache"]["stats"]>; endpoint: { url: string | null; error: string | null } } {
     const owners = this.tokens.owners();
     const keyOf = new Map(owners.map((o) => [o, tokenKey(this.tokens.get(o) ?? "")]));
     return {
@@ -22,6 +23,7 @@ export class ProxyService {
         error: this.errors.get(owner) ?? null,
       })),
       cache: this.client.cache.stats(),
+      endpoint: this.endpoint(),
     };
   }
 

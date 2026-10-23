@@ -18,10 +18,18 @@ export const cacheStatsSchema = z.object({
   misses: z.number(),
 });
 
+export const endpointSchema = z.object({
+  /** Local URL agents reach, or null when the port could not be bound. */
+  url: z.string().nullable(),
+  error: z.string().nullable(),
+});
+
+const statusOutput = z.object({ owners: z.array(ownerStatusSchema), cache: cacheStatsSchema, endpoint: endpointSchema });
+
 export const statusRpc = defineRpc({
   name: "github-proxy.status",
   input: z.object({}),
-  output: z.object({ owners: z.array(ownerStatusSchema), cache: cacheStatsSchema }),
+  output: statusOutput,
 });
 
 /** Store a token for an owner. The token is validated against GitHub, then never returned. */
@@ -41,5 +49,5 @@ export const clearTokenRpc = defineRpc({
 export const refreshBudgetRpc = defineRpc({
   name: "github-proxy.refresh-budget",
   input: z.object({}),
-  output: z.object({ owners: z.array(ownerStatusSchema), cache: cacheStatsSchema }),
+  output: statusOutput,
 });

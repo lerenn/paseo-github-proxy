@@ -30,6 +30,7 @@ export function ProxyScreen({ theme, layout }: PluginScreenProps) {
       <Text style={styles.muted}>
         Agents never see these tokens. The daemon makes every GitHub call with them and shares one rate-limit budget per token.
       </Text>
+      {query.data?.endpoint.error ? <Text style={styles.error}>{query.data.endpoint.error}</Text> : null}
       {query.error ? <Text style={styles.error}>{(query.error as Error).message}</Text> : null}
       {refreshMutation.error ? <Text style={styles.error}>{(refreshMutation.error as Error).message}</Text> : null}
       {query.data?.owners.length === 0 ? <Text style={styles.muted}>No tokens yet. Add one per GitHub owner or organization.</Text> : null}

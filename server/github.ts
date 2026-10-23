@@ -32,6 +32,8 @@ export interface RestRequest {
   priority?: Priority;
   /** Bypass the ETag cache. */
   fresh?: boolean;
+  /** Override the Accept header, for example `application/vnd.github.diff`. */
+  accept?: string;
 }
 
 export interface RestResponse<T = unknown> {
@@ -89,7 +91,8 @@ export class GitHubClient {
     if (!token) throw new NoTokenError(owner);
     const method = req.method ?? "GET";
     const url = `${this.base}${req.path}`;
-    const cacheKey = `${tokenKey(token)}:${url}`;
+    const accept = req.accept ?? "application/vnd.github+json";
+    const cacheKey = `${tokenKey(token)}:${accept}:${url}`;
     const cached = method === "GET" && !req.fresh ? this.cache.get(cacheKey) : undefined;
 
     const res = await this.limiter.schedule(
@@ -100,7 +103,7 @@ export class GitHubClient {
           method,
           headers: {
             authorization: `Bearer ${token}`,
-            accept: "application/vnd.github+json",
+            accept,
             "x-github-api-version": "2022-11-28",
             "user-agent": "paseo-github-proxy",
             ...(req.body !== undefined ? { "content-type": "application/json" } : {}),
