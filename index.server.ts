@@ -9,10 +9,13 @@ import { McpServer } from "./server/mcp";
 import { ProxyService } from "./server/service";
 import { SessionStore } from "./server/sessions";
 import { SHIM_SCRIPT } from "./server/shim-script";
-import { readTools } from "./server/tools";
+import { ALL_TOOLS } from "./server/tools";
+import { AuditLog } from "./server/audit";
+import { WriteGate } from "./server/write";
 import { TokenStore } from "./server/tokens";
 import { isOptedOut } from "./shared/plugin";
-import { clearTokenRpc, refreshBudgetRpc, setTokenRpc, statusRpc } from "./shared/rpc";
+import { policySchema, policySettings } from "./shared/policy";
+import { auditRpc, clearTokenRpc, refreshBudgetRpc, setTokenRpc, statusRpc } from "./shared/rpc";
 
 const DEFAULT_PORT = 47821;
 const home = path.join(homedir(), ".paseo", "github-proxy");
@@ -21,7 +24,18 @@ export default function contribute(server: PluginServerContext) {
   const tokens = new TokenStore();
   const client = new GitHubClient({ tokens });
   const sessions = new SessionStore();
-  const http = new ProxyHttp({ client, sessions, mcp: new McpServer(readTools) });
+  const settings = server.registerSettings(policySettings);
+  const audit = new AuditLog();
+  const write = new WriteGate({
+    client,
+    audit,
+    policy: async () => {
+      const state = await settings.read();
+      // An unreadable policy must not fall back to something more permissive than the defaults.
+      return state.status === "ready" ? state.values : policySchema.parse({});
+    },
+  });
+  const http = new ProxyHttp({ client, sessions, mcp: new McpServer(ALL_TOOLS), write });
 
   let url: string | null = null;
   let startError: string | null = null;
@@ -66,6 +80,7 @@ export default function contribute(server: PluginServerContext) {
   const removeArchived = server.on("agent.archived", ({ agent }) => sessions.forgetAgent(agent.id));
 
   server.handle(statusRpc, () => service.status());
+  server.handle(auditRpc, ({ limit }) => ({ entries: audit.recent(limit) }));
   server.handle(refreshBudgetRpc, () => service.refresh());
   server.handle(setTokenRpc, async ({ owner, token }) => {
     await service.setToken(owner, token);

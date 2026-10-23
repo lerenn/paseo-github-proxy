@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { Priority } from "../shared/budget";
 import type { GitHubClient } from "./github";
+import type { WriteGate } from "./write";
 
 const run = promisify(execFile);
 
@@ -10,6 +11,10 @@ export interface OpsContext {
   /** Working directory of the calling agent, used to infer repository and branch. */
   cwd?: string;
   priority?: Priority;
+  /** Present for MCP calls; the gh shim never writes. */
+  write?: WriteGate;
+  /** The calling agent, once its session is bound. */
+  agentId?: string | null;
 }
 
 export interface Repo {

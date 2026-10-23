@@ -18,6 +18,7 @@ beforeAll(async () => {
   cleanup = contribute({
     before: (name: string, h: Handler) => (before.set(name, h), () => before.delete(name)),
     on: (name: string, h: Handler) => (on.set(name, h), () => on.delete(name)),
+    registerSettings: () => ({ read: async () => ({ status: "ready", revision: "1", values: { allow: ["comment"], deny: [], repos: [] } }), subscribe: () => () => {} }),
     handle: (contract: { name: string }, h: Handler) => void rpcs.set(contract.name, h),
   } as never) as () => Promise<void>;
 });

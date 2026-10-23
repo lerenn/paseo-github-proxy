@@ -5,6 +5,7 @@ import type { GitHubClient } from "./github";
 import { McpServer } from "./mcp";
 import type { OpsContext } from "./ops";
 import type { SessionStore } from "./sessions";
+import type { WriteGate } from "./write";
 
 const MAX_BODY = 1_000_000;
 
@@ -16,7 +17,7 @@ export class ProxyHttp {
   private server: Server | null = null;
 
   constructor(
-    private readonly deps: { client: GitHubClient; sessions: SessionStore; mcp: McpServer },
+    private readonly deps: { client: GitHubClient; sessions: SessionStore; mcp: McpServer; write?: WriteGate },
   ) {}
 
   /** Resolves with the base URL. Rejects if the port is taken. */
@@ -64,10 +65,10 @@ export class ProxyHttp {
     } catch (err) {
       return { status: 400, body: { error: (err as Error).message } };
     }
-    const ctx: OpsContext = { client: this.deps.client, cwd: session.cwd };
+    const ctx: OpsContext = { client: this.deps.client, cwd: session.cwd, agentId: session.agentId ?? null };
 
     if (url === "/mcp") {
-      const reply = await this.deps.mcp.handle(payload, { ...ctx, priority: "interactive" });
+      const reply = await this.deps.mcp.handle(payload, { ...ctx, priority: "interactive", write: this.deps.write });
       return reply ? { status: 200, body: reply } : { status: 202, body: null };
     }
     const { argv, cwd } = payload as { argv?: unknown; cwd?: unknown };

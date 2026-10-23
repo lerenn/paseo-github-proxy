@@ -1,5 +1,6 @@
 import { defineRpc } from "@getpaseo/plugin";
 import { z } from "zod";
+import { auditEntrySchema } from "./audit";
 import { budgetSnapshotSchema } from "./budget";
 
 export const ownerStatusSchema = z.object({
@@ -50,4 +51,11 @@ export const refreshBudgetRpc = defineRpc({
   name: "github-proxy.refresh-budget",
   input: z.object({}),
   output: statusOutput,
+});
+
+/** Recent write attempts, newest first. */
+export const auditRpc = defineRpc({
+  name: "github-proxy.audit",
+  input: z.object({ limit: z.number().int().min(1).max(500).default(100) }),
+  output: z.object({ entries: z.array(auditEntrySchema) }),
 });

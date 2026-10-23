@@ -3,6 +3,7 @@ import { SettingsInput } from "@getpaseo/plugin/client/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
+import { AuditPanel, PolicyPanel } from "./policy";
 import type { ResourceBudget } from "../shared/budget";
 import { clearTokenRpc, refreshBudgetRpc, setTokenRpc, statusRpc, type OwnerStatus } from "../shared/rpc";
 
@@ -36,6 +37,8 @@ export function ProxyScreen({ theme, layout }: PluginScreenProps) {
       {query.data?.owners.length === 0 ? <Text style={styles.muted}>No tokens yet. Add one per GitHub owner or organization.</Text> : null}
       {query.data?.owners.map((o) => <OwnerCard key={o.owner} owner={o} styles={styles} onChanged={reload} />)}
       <AddOwner styles={styles} onChanged={reload} />
+      <PolicyPanel styles={styles} />
+      <AuditPanel styles={styles} />
       {query.data ? (
         <Text style={styles.muted}>
           Cache: {query.data.cache.entries} entries, {query.data.cache.hits} revalidated without cost, {query.data.cache.misses} fetched.
