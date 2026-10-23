@@ -13,7 +13,7 @@ function ProxyItem({ currentScreen, openScreen }: PluginSidebarItemProps) {
 }
 
 export default function contribute(client: PluginClientContext) {
-  client.addScreen({ id: "proxy", title: "GitHub proxy", Component: ProxyScreen });
-  client.addSidebarHeaderItem({ id: "proxy", title: "GitHub proxy", Component: ProxyItem });
+  client.addScreen({ id: "proxy", title: "GitHub Proxy", Component: ProxyScreen });
+  client.addSidebarHeaderItem({ id: "proxy", title: "GitHub Proxy", Component: ProxyItem });
   return () => {};
 }

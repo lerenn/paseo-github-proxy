@@ -1,4 +1,4 @@
-GitHub proxy routes every agent's GitHub access through the daemon. Agents get no GitHub token. They call injected tools instead, and the daemon makes the request with a token it holds, so all agents on a host share one rate-limit budget per token instead of exhausting it independently.
+GitHub Proxy routes every agent's GitHub access through the daemon. Agents get no GitHub token. They call injected tools instead, and the daemon makes the request with a token it holds, so all agents on a host share one rate-limit budget per token instead of exhausting it independently.
 
 Responses are cached with conditional requests, so repeated reads of the same pull request or check run cost little or nothing against the limit. Requests have priorities, and the plugin backs off on both primary and secondary rate limits.
 
@@ -8,7 +8,7 @@ Agents can also subscribe to events, for example checks finished on a pull reque
 
 ## Setup
 
-Open the GitHub proxy screen and add one token per GitHub owner or organization, for example `anyshift-io`. Tokens are write-only: the screen shows whether one is set but never displays it. They are stored on the daemon machine in a file readable only by its user. The screen also shows the remaining budget for each token.
+Open the GitHub Proxy screen and add one token per GitHub owner or organization, for example `anyshift-io`. Tokens are write-only: the screen shows whether one is set but never displays it. They are stored on the daemon machine in a file readable only by its user. The screen also shows the remaining budget for each token.
 
 The webhook forwarder needs admin rights on the repository, and GitHub allows one forwarder per repository. To use it the plugin creates a temporary webhook named `cli` on each watched repository, as `gh webhook forward` does, and removes it when nothing is watched. Without admin rights, or with webhooks turned off in the screen, subscriptions rely on polling alone, never faster than every 60 seconds, and are slower.
 
