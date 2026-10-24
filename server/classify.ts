@@ -59,6 +59,9 @@ export function classifyRest(method: string, rawPath: string, body: unknown): Cl
     return done(...ops);
   }
   if (m === "DELETE" && /^git\/refs\//.test(rest)) return done("branch.delete");
+  if (m === "POST" && rest === "releases") return done("release.create");
+  if (m === "POST" && rest === "git/refs") return done("ref.create");
+  if (m === "PUT" && /^contents\/.+/.test(rest)) return done("contents.write");
   return done("other");
 }
 
@@ -123,6 +126,8 @@ const GRAPHQL_OPS: Record<string, Operation> = {
   closeIssue: "issue.update",
   reopenIssue: "issue.update",
   deleteRef: "branch.delete",
+  createRef: "ref.create",
+  createCommitOnBranch: "contents.write",
 };
 
 /** What a GraphQL mutation document needs. The repository is not knowable from the document. */

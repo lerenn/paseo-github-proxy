@@ -57,8 +57,11 @@ describe("classifyRest", () => {
 
   it("classifies deletions and unknown writes", () => {
     expect(c("DELETE", "/repos/acme/app/git/refs/heads/x").ops).toEqual(["branch.delete"]);
+    expect(c("POST", "/repos/acme/app/releases").ops).toEqual(["release.create"]);
+    expect(c("POST", "/repos/acme/app/git/refs").ops).toEqual(["ref.create"]);
+    expect(c("PUT", "/repos/acme/app/contents/dir/file.json").ops).toEqual(["contents.write"]);
     expect(c("DELETE", "/repos/acme/app/issues/comments/9").ops).toEqual(["comment.delete"]);
-    expect(c("POST", "/repos/acme/app/releases").ops).toEqual(["other"]);
+    expect(c("POST", "/repos/acme/app/releases/1/assets").ops).toEqual(["other"]);
     expect(c("POST", "/gists")).toEqual({ repo: null, ops: ["other"] });
   });
 });
