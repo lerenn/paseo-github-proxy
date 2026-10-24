@@ -60,9 +60,11 @@ tools: `github_comment`, `github_pr_create`, `github_label`, `github_request_rev
 pre-approved, so the agent's own permission mode still applies on top of the policy.
 
 - Operations: `comment`, `comment.delete`, `pr.create`, `pr.update`, `pr.close`, `pr.merge`, `label`,
-  `review.request`, `review.submit`, `issue.create`, `issue.update`, `branch.delete`, `admin`, `other`.
+  `review.request`, `review.submit`, `issue.create`, `issue.update`, `branch.delete`, `release.create`
+  (`POST releases`), `ref.create` (`POST git/refs`), `contents.write` (`PUT contents/{path}`), `admin`, `other`.
 - Default allow: `comment`, `pr.create`, `label`, `review.request`. Everything else is refused,
-  including anything the classifier does not recognize (`other`).
+  including `release.create`, `ref.create`, `contents.write` and anything the classifier does not
+  recognize (`other`).
 - Rules per repository (`owner/name`, `owner/*`, `*`; case-insensitive) add allows and deny
   operations. A deny from the defaults or any matching rule always wins. Example: allow `pr.merge`
   on `anyshift-io/*` and deny it on `anyshift-io/tf-aws`.

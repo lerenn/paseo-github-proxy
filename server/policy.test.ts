@@ -12,7 +12,7 @@ describe("decide", () => {
   });
 
   it("refuses merges, admin and unclassified writes by default", () => {
-    for (const op of ["pr.merge", "admin", "other", "pr.close", "review.submit", "branch.delete"] as const) {
+    for (const op of ["pr.merge", "admin", "other", "pr.close", "review.submit", "branch.delete", "release.create", "ref.create", "contents.write"] as const) {
       const d = decide(policy(), "acme/app", [op]);
       expect(d.allowed).toBe(false);
       expect(d.reason).toContain("Nothing was sent to GitHub");

@@ -15,6 +15,12 @@ export const OPERATIONS = [
   "issue.create",
   "issue.update",
   "branch.delete",
+  /** Publish a release: `POST repos/{o}/{r}/releases`. */
+  "release.create",
+  /** Create a branch or tag ref: `POST repos/{o}/{r}/git/refs`. */
+  "ref.create",
+  /** Commit a file: `PUT repos/{o}/{r}/contents/{path}`. */
+  "contents.write",
   /** Repository, organization and security settings: hooks, collaborators, secrets, protection, deletion. */
   "admin",
   /** Any write the proxy cannot classify. */

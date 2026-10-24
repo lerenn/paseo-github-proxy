@@ -65,7 +65,7 @@ export function PolicyPanel({ styles }: { styles: Record<string, any> }) {
           {rules.map((r) => (
             <View key={r.id} style={styles.card}>
               <SettingsInput label="Repository" hint="owner/name, owner/* or *. For example anyshift-io/tf-aws." initialValue={r.repo} onChangeText={(repo) => edit(r.id, { repo })} />
-              <SettingsInput label="Also allow" hint="For example pr.merge." initialValue={r.allow} onChangeText={(v) => edit(r.id, { allow: v })} />
+              <SettingsInput label="Also allow" hint="For example pr.merge, release.create, ref.create, contents.write." initialValue={r.allow} onChangeText={(v) => edit(r.id, { allow: v })} />
               <SettingsInput label="Deny" hint="For example pr.merge to never auto-merge here." initialValue={r.deny} onChangeText={(v) => edit(r.id, { deny: v })} />
               <Button styles={styles} label="Remove rule" onPress={() => setRules((list) => list.filter((x) => x.id !== r.id))} />
             </View>
