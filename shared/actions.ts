@@ -55,6 +55,31 @@ export const ACTION_INFO: Record<Action, { label: string; hint: string; risk: "s
   generic_api_write: { label: "Generic API (write)", hint: "github_api writes: any non-GET REST call and GraphQL mutations.", risk: "high" },
 };
 
+/**
+ * The catalog version a policy was last saved at. Version 1 is the original set (up to 0.4), 2 added the `gh` parity
+ * actions (0.5.0), 3 added `subscribe_events` (0.7.0). Bump it, and fill ACTION_SINCE, when an action is added.
+ */
+export const CATALOG_VERSION = 3;
+/** First catalog version that has the action. Actions absent here exist since version 1. */
+export const ACTION_SINCE: Partial<Record<Action, number>> = {
+  create_branch: 2, write_file: 2, manage_labels: 2, manage_release: 2, manage_actions: 2, manage_variables: 2,
+  create_repo: 2, edit_repo: 2, manage_gists: 2, manage_notifications: 2, manage_project: 2,
+  subscribe_events: 3,
+};
+/**
+ * When a policy saved before an action existed is loaded, the action starts out allowed (or denied, in a rule) only
+ * where one of these already is. Anything absent here (write_file, manage_release, manage_actions, manage_variables,
+ * create_repo, edit_repo, manage_gists, manage_notifications, manage_project) stays denied until the user checks it.
+ */
+export const IMPLIED_BY: Partial<Record<Action, readonly Action[]>> = {
+  create_branch: ["create_pr"], // a pull request needs a branch
+  manage_labels: ["update_pr"], // update_pr already labels pull requests and issues
+  subscribe_events: ["comment"], // it only wakes the agent; comment is the lightest write the user granted
+};
+
+/** Actions that have a plain git equivalent, for the denial message. */
+export const PLAIN_GIT_ACTIONS: readonly Action[] = ["create_branch", "write_file"];
+
 export const PRESETS = ["read_only", "pr_workflow", "full"] as const;
 export type Preset = (typeof PRESETS)[number];
 

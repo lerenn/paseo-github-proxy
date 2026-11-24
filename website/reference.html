@@ -51,6 +51,7 @@
 <tr><td>Full</td><td>Every action</td></tr>
 </table>
 <p>Changing an individual permission makes the policy <em>Custom</em> unless it matches a preset.</p>
+<p>Upgrading: an action added after your policy was saved is allowed where an implying action is allowed, in the default permissions and in rules that list actions: <code>create_branch</code> where <code>create_pr</code> is, <code>manage_labels</code> where <code>update_pr</code> is, <code>subscribe_events</code> where <code>comment</code> is. Destructive and admin actions (<code>write_file</code>, releases, Actions, variables, repository creation and editing, gists, notifications, projects) are never implied; check them yourself. A denial names the action and the rule or default policy, and tells the agent to ask you to enable it in the Policy tab.</p>
 <h3 id="rules">Rules</h3>
 <p>A rule has an effect (<code>allow</code> or <code>deny</code>), repository patterns, actions (or all), and an optional reason that is shown to the agent in the denial. For each needed action: a matching <strong>deny</strong> rule denies; otherwise a matching <strong>allow</strong> rule allows; otherwise the default permissions decide. Rule order does not matter.</p>
 <p>Patterns are <code>owner/repo</code>, case-insensitive. <code>*</code> matches any run of characters inside one part: <code>acme/*</code>, <code>*/docs</code>, <code>acme/web-*</code>. A lone <code>*</code> matches every repository.</p>

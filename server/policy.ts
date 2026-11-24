@@ -1,4 +1,4 @@
-import { ACTION_INFO, type Action } from "../shared/actions";
+import { ACTION_INFO, PLAIN_GIT_ACTIONS, type Action } from "../shared/actions";
 import type { Policy, Rule } from "../shared/config";
 
 export interface Decision {
@@ -27,6 +27,14 @@ export function ruleCovers(rule: Rule, repo: string, action: Action): boolean {
   return repoMatch && actionMatch;
 }
 
+const GIT_NOTE = " Plain git commands are not affected by this policy (use them only if your project instructions allow git).";
+
+/** How to enable an action: names it and where, so the agent can ask the user precisely. */
+function enableHint(action: Action, repo: string, rule: { index: number } | null): string {
+  const where = rule ? `${repo || "this target"} (edit or remove rule #${rule.index + 1})` : "the default policy";
+  return ` Do not retry this call. Ask the user to enable \`${action}\` for ${where} in the Policy tab of the GitHub Proxy plugin.${PLAIN_GIT_ACTIONS.includes(action) ? GIT_NOTE : ""}`;
+}
+
 function describeRule(index: number, rule: Rule): string {
   const scope = rule.repos.length ? rule.repos.join(", ") : "*";
   const what = rule.actions.length ? rule.actions.join(", ") : "*";
@@ -48,7 +56,7 @@ export function evaluateAction(policy: Policy, repo: string, action: Action): De
         allowed: false,
         action,
         rule: { index, rule },
-        message: `Denied by ${describeRule(index, rule)}: "${ACTION_INFO[action].label}" is not allowed on ${repo || "this target"}.${why} Do not retry; ask the user to change the GitHub Proxy policy if this is needed.`,
+        message: `Denied by ${describeRule(index, rule)}: "${ACTION_INFO[action].label}" is not allowed on ${repo || "this target"} (action \`${action}\`).${why}${enableHint(action, repo, { index })}`,
       };
     }
     allowRule ??= { index, rule };
@@ -59,7 +67,7 @@ export function evaluateAction(policy: Policy, repo: string, action: Action): De
     allowed: false,
     action,
     rule: null,
-    message: `Denied by the default policy (${policy.preset.replace("_", "-")}): "${ACTION_INFO[action].label}" is not allowed on ${repo || "this target"}. Do not retry; ask the user to allow it in GitHub Proxy → Policy.`,
+    message: `Denied by the default policy (${policy.preset.replace("_", "-")}): "${ACTION_INFO[action].label}" is not allowed on ${repo || "this target"} (action \`${action}\`).${enableHint(action, repo, null)}`,
   };
 }
 
