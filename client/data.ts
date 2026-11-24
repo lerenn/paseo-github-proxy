@@ -1,7 +1,7 @@
 import { useRpc } from "@getpaseo/plugin/client";
 import { useToast } from "@getpaseo/plugin/client/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { discoverOwnersRpc, discoverReposRpc, activityRpc, appCredentialsClearRpc, appCredentialsSaveRpc, clearRpc, configGetRpc, configSaveRpc, overviewRpc, subscriptionRemoveRpc, subscriptionsRpc, webhookSecretRpc, webhookStatusRpc } from "../shared/contracts";
+import { discoverOwnersRpc, discoverReposRpc, activityRpc, appCredentialsClearRpc, appCredentialsSaveRpc, clearRpc, clientApiStatusRpc, clientTokenRpc, configGetRpc, configSaveRpc, overviewRpc, subscriptionRemoveRpc, subscriptionsRpc, webhookSecretRpc, webhookStatusRpc } from "../shared/contracts";
 import type { Config } from "../shared/config";
 
 const POLL_MS = 2000;
@@ -104,4 +104,15 @@ export function useSubscriptions() {
   const query = useQuery({ queryKey: key, queryFn: () => list({}), refetchInterval: POLL_MS * 3 });
   const unsubscribe = useMutation({ mutationFn: (id: string) => remove({ id }), onSuccess: (data) => client.setQueryData(key, data) });
   return { subscriptions: query.data?.subscriptions, unsubscribe };
+}
+
+export function useClientApi() {
+  const status = useRpc(clientApiStatusRpc);
+  const token = useRpc(clientTokenRpc);
+  const client = useQueryClient();
+  const key = ["github-proxy", "client-api"];
+  const query = useQuery({ queryKey: key, queryFn: () => status({}), refetchInterval: POLL_MS });
+  /** Generates or removes the bearer token; a generated value is in the result once. */
+  const setToken = useMutation({ mutationFn: (action: "generate" | "clear") => token({ action }), onSuccess: () => void client.invalidateQueries({ queryKey: key }) });
+  return { status: query.data, setToken };
 }

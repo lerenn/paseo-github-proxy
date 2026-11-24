@@ -14,6 +14,8 @@ import {
   sourceCheckRpc,
   subscriptionRemoveRpc,
   subscriptionsRpc,
+  clientApiStatusRpc,
+  clientTokenRpc,
   webhookSecretRpc,
   webhookStatusRpc,
 } from "./shared/contracts";
@@ -22,7 +24,8 @@ import { appKey } from "./server/apps";
 
 import { discoverOwners, discoverRepos } from "./server/discovery";
 import { createHardRuleHandler } from "./server/hardrule";
-import { createRuntime, nodeFetch } from "./server/runtime";
+import { clientEnv } from "./server/clientapi";
+import { createRuntime, helperPath, nodeFetch } from "./server/runtime";
 import { buildTools, SOFT_RULE_METADATA_KEY, SOFT_RULE_PROMPT, withSoftRule } from "./server/tools";
 
 const hostAppend = (request: object): string[] => {
@@ -55,11 +58,15 @@ export default function contribute(server: PluginServerContext) {
   server.addHook("agent.open.before", async ({ request }, context) => {
     rt.capturePaseo(context?.paseo);
     if (request.purpose === "history") return;
-    const { forbidRawGithub } = rt.store.get();
+    const { forbidRawGithub, clientApi } = rt.store.get();
+    // With the client API on, the session gets GH_PROXY_URL (and token) and a git credential helper. Launch-only: it
+    // applies to sessions opened after the change.
+    const env = clientApi.enabled && clientApi.injectEnv ? clientEnv({ config: clientApi, token: rt.store.clientToken(), helperPath: helperPath(), existing: request.env }) : null;
     // Hosts from 0.17 take per-open instructions; older ones ignore the field and rely on the saved prompt above.
     const saved = request.metadata?.[SOFT_RULE_METADATA_KEY] === true;
     return {
       ...request,
+      ...(env ? { env: { ...request.env, ...env } } : {}),
       tools: [...request.tools, ...buildTools({ proxy: rt.proxy, softRule: forbidRawGithub, subscriptions: rt.subscriptions, onContext: (p) => rt.capturePaseo(p) })],
       ...(forbidRawGithub && !saved ? { appendSystemPrompt: [...hostAppend(request), SOFT_RULE_PROMPT] } : {}),
     };
@@ -90,9 +97,17 @@ export default function contribute(server: PluginServerContext) {
     rt.capturePaseo(context?.paseo);
     const saved = rt.store.set(config);
     await rt.webhooks.apply(saved.webhooks);
+    await rt.clientApi.apply(saved.clientApi);
     return { config: saved };
   });
   server.handle(webhookStatusRpc, () => rt.webhooks.status());
+  server.handle(clientApiStatusRpc, () => rt.clientApi.status());
+  server.handle(clientTokenRpc, async ({ action }) => {
+    const token = action === "generate" ? rt.store.generateClientToken() : "";
+    if (action === "clear") rt.store.clearClientToken();
+    await rt.clientApi.apply(rt.store.get().clientApi); // a non-loopback bind starts or stops with the token
+    return { tokenSet: !!rt.store.clientToken(), token };
+  });
   server.handle(webhookSecretRpc, ({ id, action }) => {
     let secret = "";
     if (action === "generate") secret = rt.store.generateWebhookSecret(id);
@@ -107,11 +122,13 @@ export default function contribute(server: PluginServerContext) {
   server.handle(appCredentialsSaveRpc, (input) => {
     const id = rt.store.saveApp(input);
     rt.apps.forget(id);
+    rt.git.clear();
     rt.tracker.clear(appKey(id));
     return { apps: rt.store.appViews(), id };
   });
   server.handle(appCredentialsClearRpc, ({ id }) => {
     rt.store.removeApp(id);
+    rt.git.clear();
     rt.apps.forget(id);
     rt.tracker.clear(appKey(id));
     return { apps: rt.store.appViews() };
@@ -165,6 +182,7 @@ export default function contribute(server: PluginServerContext) {
 
   // The listener is off unless the user enabled it. A start error is shown in the Auth tab, never thrown.
   void rt.webhooks.apply(rt.store.get().webhooks);
+  void rt.clientApi.apply(rt.store.get().clientApi);
 
   return () => rt.dispose();
 }

@@ -24,6 +24,10 @@ A second, optional setting (the hard rule) denies permission requests for shell 
 
 Optional and off by default. Turn on the webhook listener in Auth (it binds every interface by default, 0.0.0.0, and every delivery needs a valid signature; set 127.0.0.1 for this machine only), give each GitHub App a generated webhook secret, and point GitHub at it through a public URL that you provide (a tunnel or reverse proxy such as cloudflared). Subscribe the App to the check_run, check_suite, issue_comment, merge_group, pull_request, pull_request_review, pull_request_review_comment, push, release, status and workflow_run events. Verified events refresh the cache at once, and the Overview tab charts them per minute as delivered to a subscriber, ignored or rejected, and agents can ask to be woken when checks finish (on a pull request, a commit, a branch or a tag), a review or comment arrives (optionally mentioning a handle), a pull request or merge queue group is merged or closed, a branch or tag is pushed or a release is published (`github_subscribe`, policy action Subscribe to events, off in the Read-only preset).
 
+## Client API for gh and git
+
+Optional and off by default. A second local listener (its own port, 127.0.0.1 by default, never the webhook listener or its tunnel) lets the `gh` shim (`GH_PROXY_URL`) and `git` over HTTPS go through the same owner allowlist, policy, cache and rate limits as the tools. An optional bearer token is stored on the daemon machine; with no token only this machine can call. Git gets a token of the GitHub App serving the owner, limited to the repository, read-only unless the policy allows Write file and Create branch there. New agent sessions can get the environment and the git credential helper automatically (a separate switch); it affects only sessions opened afterwards.
+
 ## Good to know
 
 - Needs Paseo 0.16.2 or later.

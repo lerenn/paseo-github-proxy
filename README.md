@@ -9,6 +9,7 @@ A [Paseo](https://paseo.sh) plugin that gives every agent policy-controlled, cac
 - **Clear denials.** The agent is told which rule denied a call and why, so it stops retrying.
 - **Parity with `gh`.** Pull requests, issues, commits, files, releases, workflow runs and logs, labels, gists, projects, secret names and variables, rulesets, organizations and notifications, each as a typed tool with its own policy action. [docs/gh-parity.md](docs/gh-parity.md) lists every `gh` command and what is left out and why.
 - **Optional webhooks.** Off by default. With a webhook listener, GitHub pushes events to the plugin: cached reads are invalidated at once, and agents can ask to be woken when checks finish (on a PR, a commit, a branch or a tag), a review or comment arrives (optionally mentioning a handle), a PR or a merge queue group is merged, a branch or tag is pushed or a release is published (`github_subscribe`).
+- **Optional client API.** Off by default. A local endpoint (its own port, loopback by default, optional bearer token) for the `gh` shim (`GH_PROXY_URL`) and a git credential helper, so `gh` and `git push` over HTTPS go through the same policy, cache and rate limits. [docs/client-api.md](docs/client-api.md).
 - **A full-screen page** (sidebar → GitHub Proxy) with Overview, Auth, Policy and Activity tabs.
 
 The logic is a TypeScript port of an internal Go service (GitHub App JWT and installation tokens, REST/GraphQL access, ETag cache, rate-limit handling, policy and owner allowlist). It runs inside the plugin server: no external service.
@@ -109,6 +110,16 @@ Filters: `repo` and `events` always; `conclusion`, `branch`, `tag`, `workflow` a
 
 One-shot by default, `persistent` keeps firing. It expires after 6 hours by default; `ttl_hours` (for example 24 for a CI wait) sets it up to 168 hours (7 days); at most 20 per agent. Subscriptions are kept in `subscriptions.json`, tied to the agent, and listed (with Unsubscribe) in the Activity tab. When an event matches, the agent gets a short prompt through the Paseo SDK (`paseo.agents.ref(id).send(...)`, steering a running turn rather than interrupting it) with the event, repository, PR, branch or tag and a hint to read details with the `github_*` tools. The only GitHub text in it is a title and a ref name, each cut short, on one line and quoted; comment and review bodies are never sent. Wake-ups are limited to 6 per agent per minute, and the subscriptions of an archived or missing agent are dropped. The `subscribe_events` action is in the PR workflow and Full presets and denied in the Read-only preset (it changes nothing on GitHub, but it makes the plugin prompt the agent; allow it with a rule if read-only agents need it). Note that a pull request has one `checks_completed` event per finished check suite, so use a `conclusion` filter or re-check with `github_checks` after the wake-up.
 
+### 5. Client API for gh and git (optional, Auth tab)
+
+For tools that are not the `github_*` tools: the `gh` shim of a lab image and `git fetch` / `git push` over HTTPS. In the Auth tab turn on **Serve the client API** (port `8788`, bind `127.0.0.1` by default). It is a separate server from the webhook listener: it is never reachable through the webhook tunnel, serves only `/v1/*` and `/healthz`, and with no token answers loopback peers only and refuses to start on another bind address. Optionally generate a bearer token (shown once, stored in `secrets.json`).
+
+- `GET|POST|PATCH|PUT|DELETE /v1/rest/{path...}` and `POST /v1/graphql` (with `X-Proxy-Repo`) run the same pipeline as the tools: owner allowlist, policy, per-owner App, rate limits, cache, activity log. A denial is `403 {"error":"policy_denied","rule":...,"action":...,"message":...}`.
+- `POST /v1/git-credential` answers `https://github.com/<owner>/<repo>` with `x-access-token` and an installation token of the App serving the owner, limited to that repository: read-only unless the policy allows Write file and Create branch there. The helper protocol cannot tell a fetch from a push, so the policy decides.
+- `server/git-credential-helper.mjs` is the git credential helper. With **Set it up in every new agent session** on (default), new sessions get `GH_PROXY_URL`, `GH_PROXY_TOKEN` and the git configuration through `GIT_CONFIG_*`. It affects only sessions opened afterwards, and is independent of the soft and hard rules (those are about raw access; this path goes through the policy).
+
+Details, the routes, what the lab image needs and what differs from the old Go proxy: [docs/client-api.md](docs/client-api.md).
+
 ## Tools
 
 Related operations are grouped behind one tool with an `operation` input (for example `github_actions` or `github_releases`), so an agent sees about thirty tools rather than a hundred. Each operation states its own action, so one tool can need `read` for one operation and `manage_actions` for another. `docs/gh-parity.md` maps every `gh` command to a tool.
@@ -179,4 +190,5 @@ Tests mock GitHub and `gh`; no network and no real credentials are used. See [AG
 - The hard rule only sees permission requests (nothing in bypass mode) and matches command text; it is not a sandbox. Block egress to GitHub on the daemon machine for a real block.
 - GraphQL scoping is best effort: it checks the repo you pass and `owner:` literals in the query; node-ID queries are refused unless every owner is allowed.
 - Webhooks need a public URL that you provide. Wake-ups need the plugin to hold a Paseo SDK handle: it takes one from the first session open or screen request after a daemon restart, so an event arriving before that is not delivered to the agent (its subscription is kept).
+- The client API serves the routes `gh` needs, not the old proxy's dataset routes or `/v1/watch`; git write tokens cannot be limited to branches (see docs/client-api.md).
 - Activity and counters are in memory (reset on plugin restart); config and cache persist.

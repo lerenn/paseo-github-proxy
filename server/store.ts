@@ -65,6 +65,8 @@ export class ConfigStore {
   private keys = new Map<string, string>();
   /** Webhook secrets, per App id. Same file as the keys, same rules: never logged, never sent to the client. */
   private hookSecrets = new Map<string, string>();
+  /** The client API bearer token. Same file, same rules: never logged, never sent to the client after it was generated. */
+  private clientTokenValue = "";
 
   constructor(private readonly dir: string) {
     const parsed = configSchema.safeParse(readJson(path.join(dir, "config.json")) ?? {});
@@ -78,7 +80,8 @@ export class ConfigStore {
         console.error("[github-proxy] could not save the migrated policy:", (error as Error).message);
       }
     }
-    const secrets = readJson(path.join(dir, "secrets.json")) as { app?: Partial<AppCredentials>; apps?: Record<string, { privateKey?: string; webhookSecret?: string }> } | null;
+    const secrets = readJson(path.join(dir, "secrets.json")) as { clientToken?: string; app?: Partial<AppCredentials>; apps?: Record<string, { privateKey?: string; webhookSecret?: string }> } | null;
+    if (typeof secrets?.clientToken === "string") this.clientTokenValue = secrets.clientToken;
     for (const [id, v] of Object.entries(secrets?.apps ?? {})) {
       if (typeof v?.privateKey === "string" && v.privateKey) this.keys.set(id, v.privateKey);
       if (typeof v?.webhookSecret === "string" && v.webhookSecret) this.hookSecrets.set(id, v.webhookSecret);
@@ -113,7 +116,7 @@ export class ConfigStore {
   }
 
   private writeSecrets(): void {
-    writeJson(path.join(this.dir, "secrets.json"), { apps: Object.fromEntries([...this.keys].map(([id, privateKey]) => [id, { privateKey, ...(this.hookSecrets.has(id) ? { webhookSecret: this.hookSecrets.get(id) } : {}) }])) }, 0o600);
+    writeJson(path.join(this.dir, "secrets.json"), { ...(this.clientTokenValue ? { clientToken: this.clientTokenValue } : {}), apps: Object.fromEntries([...this.keys].map(([id, privateKey]) => [id, { privateKey, ...(this.hookSecrets.has(id) ? { webhookSecret: this.hookSecrets.get(id) } : {}) }])) }, 0o600);
   }
 
   get(): Config {
@@ -163,6 +166,24 @@ export class ConfigStore {
 
   clearWebhookSecret(id: string): void {
     if (this.hookSecrets.delete(id)) this.writeSecrets();
+  }
+
+  /** The client API bearer token, or "" when none is set. Server side only. */
+  clientToken(): string {
+    return this.clientTokenValue;
+  }
+
+  /** Stores a new random client API token and returns it, once for the screen. */
+  generateClientToken(): string {
+    this.clientTokenValue = `pgp_${randomBytes(24).toString("hex")}`;
+    this.writeSecrets();
+    return this.clientTokenValue;
+  }
+
+  clearClientToken(): void {
+    if (!this.clientTokenValue) return;
+    this.clientTokenValue = "";
+    this.writeSecrets();
   }
 
   /** Adds or edits an App; returns its id. An empty key keeps the stored one. Errors are written for the user. */

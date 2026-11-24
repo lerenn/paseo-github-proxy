@@ -140,3 +140,33 @@ export const discoverReposRpc = defineRpc({
 });
 
 export const policyPreviewSchema = policySchema;
+
+/** State of the client API listener (the `gh` shim and git credential helper endpoint). */
+export const clientApiStatusRpc = defineRpc({
+  name: "github-proxy.client-api.status",
+  input: z.object({}),
+  output: z.object({
+    enabled: z.boolean(),
+    listening: z.boolean(),
+    port: z.number(),
+    bind: z.string(),
+    /** The address the bind keeps to this machine. */
+    loopback: z.boolean(),
+    /** A start error (port in use, non-loopback bind without a token), empty otherwise. */
+    error: z.string(),
+    tokenSet: z.boolean(),
+    /** The URL agents use (GH_PROXY_URL). */
+    url: z.string(),
+    /** Whether the credential helper script was found next to the plugin. */
+    helperFound: z.boolean(),
+    lastRequestAt: z.number().nullable(),
+    counters: z.object({ requests: z.number(), denied: z.number(), unauthorized: z.number(), gitCredentials: z.number() }),
+  }),
+});
+
+/** Generates (`generate`) or removes (`clear`) the client API bearer token. The new value is in the answer once. */
+export const clientTokenRpc = defineRpc({
+  name: "github-proxy.client-api.token",
+  input: z.object({ action: z.enum(["generate", "clear"]) }),
+  output: z.object({ tokenSet: z.boolean(), token: z.string() }),
+});

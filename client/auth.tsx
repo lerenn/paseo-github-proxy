@@ -7,6 +7,7 @@ import { sourceCheckRpc } from "../shared/contracts";
 import { SOURCE_OPTIONS, summarize } from "./format";
 import { AppsPanel } from "./apps";
 import { Banner, BannerText, Button, Card, Heading, Muted, MultiSelect, Pill, Toggle, type Theme } from "./ui-kit";
+import { ClientApiCard } from "./clientapi";
 import { WebhooksCard } from "./webhooks";
 import { useOwnerChoices, type useConfigData } from "./data";
 
@@ -103,6 +104,7 @@ export function AuthTab({ theme, data }: { theme: Theme; data: ConfigData }) {
         />
       </Card>
       <WebhooksCard theme={theme} config={config} apps={apps} data={data} />
+      <ClientApiCard theme={theme} config={config} data={data} />
       <Owners theme={theme} config={config} data={data} apps={apps.length} />
     </View>
   );
