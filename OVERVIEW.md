@@ -1,0 +1,26 @@
+GitHub Proxy gives every agent the same small set of `github_*` tools for working with GitHub, and puts your rules, a shared cache and rate-limit handling between the agents and GitHub.
+
+Agents list and read pull requests, issues, checks, branches and repositories, search, and, when you allow it, comment, review, open issues and pull requests, merge, and delete branches. A generic `github_api` tool (REST and GraphQL) covers the rest, and is only usable where the policy allows it.
+
+## How it works
+
+The tools run inside the Paseo daemon and are added to every agent when its session opens. Each call is checked in this order: the allowed owners list, then the policy, then the cache. Reads younger than the cache lifetime (30 seconds by default) are answered locally. Older reads are revalidated with the saved ETag, which costs no rate limit when nothing changed. The cache is also saved on disk, so it survives a restart. When GitHub rate limits the active credentials, the agent gets a clear "retry at HH:MM" error, or a stale cached answer where one exists.
+
+A denied call returns a message that names the rule and the reason, so the agent stops retrying.
+
+## Setup
+
+Open GitHub Proxy from the sidebar.
+
+- Auth: pick the local `gh` CLI (it must be logged in on the daemon machine) or a GitHub App (App ID, installation ID and private key). The private key is stored in a file on the daemon machine that only its user can read, and is never sent back to the app. An option falls back to the other source when the active one is rate limited.
+- Allowed owners: list the GitHub users and organizations agents may reach. Until you add one, every call is refused.
+- Policy: starts read-only. Switch to the PR workflow or full preset, or allow individual actions, and add allow or deny rules per repository pattern. A test box shows what the policy would say about a call without sending anything.
+
+An optional setting adds an instruction to every agent's system prompt and tool descriptions to use these tools instead of `gh` or `curl`. It is a soft rule: an agent with a shell can still run `gh`.
+
+## Good to know
+
+- Needs Paseo 0.17.0 or later.
+- The activity log and counters are kept in memory and reset when the plugin restarts. Settings and the cache persist.
+- GraphQL calls are checked against the repository you pass and any `owner:` values in the query. Queries by node ID cannot be scoped to an owner, so they are refused unless every owner is allowed.
+- Changes to the soft rule apply to sessions opened after the change.
