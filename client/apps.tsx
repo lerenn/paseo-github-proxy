@@ -4,9 +4,9 @@ import { useMutation } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { appName, appOwners, isOwnerName, type AppCredentialsView, type Config } from "../shared/config";
-import { sourceCheckRpc } from "../shared/contracts";
+import { appTestRpc } from "../shared/contracts";
 import { appSummary, summarize, toggleOpen } from "./format";
-import { Banner, BannerText, Button, Card, Field, Heading, Muted, MultiSelect, Pill, Toggle, type Theme } from "./ui-kit";
+import { Banner, BannerText, Button, Card, Field, Heading, Muted, MultiSelect, Pill, Toggle, toneColor, type Theme } from "./ui-kit";
 import { useOwnerChoices, type useConfigData } from "./data";
 
 type ConfigData = ReturnType<typeof useConfigData>;
@@ -24,8 +24,10 @@ function AppEditor({ theme, app, apps, config, data, open, onToggle, onDone }: {
   // Another App taking the default turns this one off: follow the saved state.
   useEffect(() => { if (app) setDefault(app.default); }, [app?.default]);
   const found = useOwnerChoices(config.activeSource, apps.length);
-  const check = useRpc(sourceCheckRpc);
-  const test = useMutation({ mutationFn: () => check({ source: "app", app: app!.id }) });
+  const check = useRpc(appTestRpc);
+  // Tests the form as it is (saved or edited); nothing is saved, and the key is sent only when one was typed.
+  const test = useMutation({ mutationFn: () => check({ id: app?.id ?? "", organization, appId, installationId, owners, privateKey: key }) });
+  const canTest = !!appId.trim() && !!installationId.trim() && (!!app?.configured || !!key.trim());
 
   const claimedBy = new Map(apps.filter((a) => a.id !== app?.id).flatMap((a) => appOwners(a).map((o): [string, string] => [o, appName(a)])));
   const primary = organization.trim().toLowerCase();
@@ -93,15 +95,36 @@ function AppEditor({ theme, app, apps, config, data, open, onToggle, onDone }: {
           busy={data.appSave.isPending}
           onPress={() => data.appSave.mutate({ id: app?.id ?? "", organization, label: app?.label ?? "", appId, installationId, owners, default: isDefault, privateKey: key }, { onSuccess: () => { setKey(""); onDone(); } })}
         />
-        {app ? <Button theme={theme} icon="PlugZap" label="Test connection" disabled={!app.configured || dirty} busy={test.isPending} onPress={() => test.mutate()} /> : null}
+        <Button theme={theme} icon="PlugZap" label="Test connection" disabled={!canTest} busy={test.isPending} onPress={() => test.mutate()} />
         {app ? <Button theme={theme} kind="danger" icon="Trash2" label="Remove" onPress={() => data.appClear.mutate(app.id)} /> : <Button theme={theme} kind="ghost" label="Cancel" onPress={onDone} />}
       </View>
-      {app?.configured && dirty ? <Muted theme={theme}>Save your changes before testing.</Muted> : null}
+      {test.error ? <Banner theme={theme} tone="bad" icon="CircleX"><BannerText theme={theme}>{`The test could not run: ${(test.error as Error).message}`}</BannerText></Banner> : null}
       {test.data ? (
-        <Banner theme={theme} tone={test.data.ok ? "good" : "bad"} icon={test.data.ok ? "CircleCheck" : "CircleX"}>
-          <BannerText theme={theme} strong>{test.data.ok ? `Connected as ${test.data.account}` : "Not working"}</BannerText>
-          <BannerText theme={theme}>{test.data.detail}</BannerText>
-        </Banner>
+        <View style={{ gap: 8 }}>
+          <Muted theme={theme}>{dirty ? "Tested with the values in the form (not saved)." : "Tested with the saved credentials."}</Muted>
+          {test.data.steps.map((st) => {
+            const tone = st.status === "ok" ? "good" : st.status === "fail" ? "bad" : st.status === "warn" ? "warn" : "neutral";
+            const icon = st.status === "ok" ? "CircleCheck" : st.status === "fail" ? "CircleX" : st.status === "warn" ? "TriangleAlert" : "Minus";
+            return (
+              <View key={st.id} style={{ flexDirection: "row", gap: 8, alignItems: "flex-start" }}>
+                <Icon name={icon} size={15} color={toneColor(theme, tone)} />
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={{ color: theme.colors.foreground, fontSize: 13, fontWeight: "600" }}>{st.title}</Text>
+                  {st.detail ? <Muted theme={theme}>{st.detail}</Muted> : null}
+                  {st.diagnosis ? <Text style={{ color: toneColor(theme, tone), fontSize: 12, lineHeight: 17 }}>{st.diagnosis}</Text> : null}
+                </View>
+              </View>
+            );
+          })}
+          {test.data.installations.length ? (
+            <View style={{ gap: 6 }}>
+              <Muted theme={theme}>Installations of this App. Tap one to use its id:</Muted>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                {test.data.installations.map((i) => <Button key={i.id} theme={theme} label={`${i.login} (${i.type.toLowerCase()}) · ${i.id}`} onPress={() => { setInstallationId(i.id); if (!organization.trim()) setOrganization(i.login); test.reset(); }} />)}
+              </View>
+            </View>
+          ) : null}
+        </View>
       ) : null}
       </View> : null}
     </Card>

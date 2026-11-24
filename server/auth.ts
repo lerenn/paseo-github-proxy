@@ -26,6 +26,27 @@ export interface AppCredentials {
 
 export class AuthError extends Error {}
 
+export type CallStage = "app" | "installation" | "token";
+
+/** A human diagnosis for a refused call, shared by the connection test and the runtime error. */
+export function diagnose(status: number, stage: CallStage): string {
+  switch (status) {
+    case 401:
+      return "GitHub rejected the signed JWT: the private key does not belong to this App, the App ID is wrong, or the clock of the daemon machine is off by more than a minute.";
+    case 404:
+      return stage === "app"
+        ? "No App has this App ID. Check the App ID on the App's settings page (About section)."
+        : "The installation id does not belong to this App. Find it in the URL of github.com/organizations/<org>/settings/installations/<id> (or github.com/settings/installations/<id> for a user), or with GET /app/installations and the App JWT.";
+    case 403:
+      return "GitHub refused the request: the App or its installation is suspended, or lacks a permission it needs. Check the installation's settings on GitHub.";
+    case 422:
+      return "GitHub could not issue a token: the installation may be suspended or the requested permissions are not granted.";
+    default:
+      return status >= 500 ? `GitHub answered HTTP ${status}: a temporary problem on GitHub's side, try again shortly.` : `GitHub answered HTTP ${status}.`;
+  }
+}
+
+
 export interface TokenSource {
   readonly id: SourceId;
   configured(): boolean | Promise<boolean>;
@@ -140,7 +161,7 @@ export class AppSource implements TokenSource {
       headers: { Authorization: `Bearer ${jwt}`, Accept: "application/vnd.github+json", "User-Agent": "paseo-github-proxy" },
     });
     const text = await response.text();
-    if (response.status !== 201) throw new AuthError(`${this.label()}: GitHub refused the App credentials (HTTP ${response.status}). Check the App ID, installation id and key.`);
+    if (response.status !== 201) throw new AuthError(`${this.label()}: GitHub refused the App credentials (HTTP ${response.status}). ${diagnose(response.status, "token")} Do not retry until the credentials are fixed (Auth tab, Test connection).`);
     const parsed = JSON.parse(text) as { token?: string; expires_at?: string };
     if (!parsed.token) throw new AuthError(`${this.label()}: GitHub returned no installation token.`);
     this.cached = { token: parsed.token, expiresAt: parsed.expires_at ? Date.parse(parsed.expires_at) : this.clock() + 3_600_000 };

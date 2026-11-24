@@ -3,6 +3,7 @@ import {
   activityRpc,
   appCredentialsClearRpc,
   appCredentialsSaveRpc,
+  appTestRpc,
   clearRpc,
   configGetRpc,
   configSaveRpc,
@@ -12,10 +13,12 @@ import {
   overviewRpc,
   sourceCheckRpc,
 } from "./shared/contracts";
+import { testAppConnection } from "./server/appcheck";
 import { appKey } from "./server/apps";
+
 import { discoverOwners, discoverRepos } from "./server/discovery";
 import { createHardRuleHandler } from "./server/hardrule";
-import { createRuntime } from "./server/runtime";
+import { createRuntime, nodeFetch } from "./server/runtime";
 import { buildTools, SOFT_RULE_METADATA_KEY, SOFT_RULE_PROMPT, withSoftRule } from "./server/tools";
 
 const hostAppend = (request: object): string[] => {
@@ -84,6 +87,19 @@ export default function contribute(server: PluginServerContext) {
     rt.apps.forget(id);
     rt.tracker.clear(appKey(id));
     return { apps: rt.store.appViews() };
+  });
+  server.handle(appTestRpc, (input) => {
+    const stored = rt.store.apps().find((a) => a.id === input.id);
+    return testAppConnection(
+      {
+        organization: input.organization,
+        appId: input.appId.trim() || stored?.appId || "",
+        installationId: input.installationId.trim() || stored?.installationId || "",
+        owners: input.owners,
+        privateKey: input.privateKey.trim() || rt.store.appCredentials(input.id)?.privateKey || "",
+      },
+      { fetch: nodeFetch },
+    );
   });
   server.handle(sourceCheckRpc, async ({ source, app }) => {
     if (source === "gh") {
