@@ -190,6 +190,10 @@ Tools with an `operation` input group related commands so the tool list stays sh
 | `attestation` | | out of scope | verifies local artifacts |
 | `agent-task`, `copilot` | | out of scope | not a GitHub data API |
 
+## Running the real `gh` (or the lab shim) against the plugin
+
+The tools above are for agents that can call MCP tools. The optional [client API](client-api.md) serves the same pipeline to a `gh` shim that speaks the old github-proxy wire format (`GH_PROXY_URL`): `gh api`, `gh pr`, `gh issue`, `gh run`, `gh release` and the like then reach GitHub as REST and GraphQL calls checked by the policy, and `git fetch` / `git push` over HTTPS get a scoped App token from the credential helper. Commands that need a local checkout, a browser or a prompt stay out of scope there too; `gh pr checks --watch` polls (no SSE `/v1/watch`).
+
 ## Summary
 
 - Every `gh` command group that is a network call is now reachable through a curated, policy gated tool: pr, issue, repo, release, run, workflow, cache, search, label, gist, project, secret, variable, ruleset, org, status and api.

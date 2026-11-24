@@ -24,6 +24,10 @@ export class ProxyError extends Error {
     readonly kind: ProxyErrorKind,
     message: string,
     readonly status: number | null = null,
+    /** GitHub's own answer body, for an "http" error: the client API passes it on. */
+    readonly upstreamBody: string | null = null,
+    /** What denied the call (kind "denied"): the rule ("rule #2", null for the default policy) and the action. */
+    readonly denial: { rule: string | null; action: Action | null } | null = null,
   ) {
     super(message);
   }
@@ -35,6 +39,8 @@ export interface ProxyResponse {
   /** How it was served. */
   served: "upstream" | "cache" | "revalidated" | "stale";
   link: string | null;
+  etag?: string | null;
+  contentType?: string;
   source: SourceId | null;
   /** Label of the GitHub App whose credentials served (or keyed the cached answer of) the call. */
   app: string | null;
@@ -161,9 +167,9 @@ export class GithubProxy {
 
   // ---- internals -----------------------------------------------------------------------------
 
-  private judge(classified: Classified): { allowed: boolean; message: string; rule: string | null } {
+  private judge(classified: Classified): { allowed: boolean; message: string; rule: string | null; action: Action | null } {
     const verdict = this.judgeParts(classified.repo, classified.owners, classified.actions, classified.unscoped);
-    return { allowed: verdict.allowed, message: verdict.message, rule: verdict.rule ? `rule #${verdict.rule.index + 1}` : null };
+    return { allowed: verdict.allowed, message: verdict.message, rule: verdict.rule ? `rule #${verdict.rule.index + 1}` : null, action: verdict.action };
   }
 
   private judgeParts(repo: string, owners: string[], actions: Action[], unscoped?: string): Decision | { allowed: false; message: string; action: null; rule: null } {
@@ -203,13 +209,13 @@ export class GithubProxy {
   authorize(ctx: CallContext, repo: string, actions: Action[], detail = ""): void {
     const classified: Classified = { repo, owners: repo ? [repo.split("/")[0]!.toLowerCase()] : [], actions };
     const verdict = this.judge(classified);
-    if (!verdict.allowed) this.refuse(ctx, classified, verdict.message);
+    if (!verdict.allowed) this.refuse(ctx, classified, verdict.message, verdict);
     this.record(ctx, classified, "allowed", { detail, started: this.clock() });
   }
 
-  private refuse(ctx: CallContext, c: Classified, message: string): never {
+  private refuse(ctx: CallContext, c: Classified, message: string, by?: { rule: string | null; action: Action | null }): never {
     this.record(ctx, c, "denied", { detail: message, started: this.clock() });
-    throw new ProxyError("denied", message);
+    throw new ProxyError("denied", message, null, null, by ? { rule: by.rule, action: by.action } : null);
   }
 
   private async run(ctx: CallContext, p: Prepared): Promise<ProxyResponse> {
@@ -217,7 +223,7 @@ export class GithubProxy {
     const verdict = this.judge(p.classified);
     if (!verdict.allowed) {
       this.record(ctx, p.classified, "denied", { detail: verdict.message, started });
-      throw new ProxyError("denied", verdict.message);
+      throw new ProxyError("denied", verdict.message, null, null, { rule: verdict.rule, action: verdict.action });
     }
     try {
       const response = await this.fetchThrough(p);
@@ -330,7 +336,7 @@ export class GithubProxy {
   }
 
   private fromEntry(entry: CacheEntry, served: ProxyResponse["served"], source: SourceId | null, cred: Credential): ProxyResponse {
-    return { status: entry.status, data: parseBody(entry.body, entry.contentType), served, link: entry.link, source, app: cred.app };
+    return { status: entry.status, data: parseBody(entry.body, entry.contentType), served, link: entry.link, etag: entry.etag, contentType: entry.contentType, source, app: cred.app };
   }
 
   private async send(cred: Credential, p: Prepared, entry: CacheEntry | undefined, key: string): Promise<{ kind: "ok"; response: ProxyResponse } | { kind: "limited"; until: number }> {
@@ -363,7 +369,7 @@ export class GithubProxy {
         this.deps.cache.touch(key, now);
         return { kind: "ok", response: this.fromEntry(entry, "revalidated", cred.source, cred) };
       }
-      if (res.status >= 400) throw new ProxyError("http", httpMessage(res.status, text), res.status);
+      if (res.status >= 400) throw new ProxyError("http", httpMessage(res.status, text), res.status, text);
 
       const contentType = res.headers.get("content-type") ?? "application/json";
       if (p.cacheable) {
@@ -372,7 +378,7 @@ export class GithubProxy {
         // A write changes what the reads of that repo (or account) will say, whoever asked.
         for (const fragment of p.invalidates ?? (p.classified.repo ? [`/repos/${p.classified.repo}`] : [])) this.deps.cache.invalidate(fragment);
       }
-      return { kind: "ok", response: { status: res.status, data: parseBody(text, contentType), served: "upstream", link: res.headers.get("link"), source: cred.source, app: cred.app } };
+      return { kind: "ok", response: { status: res.status, data: parseBody(text, contentType), served: "upstream", link: res.headers.get("link"), etag: res.headers.get("etag"), contentType, source: cred.source, app: cred.app } };
     }
     throw new ProxyError("auth", `GitHub rejected the credentials of the ${cred.label} (HTTP 401). Ask the user to check GitHub Proxy → Auth.`, 401);
   }

@@ -69,6 +69,10 @@ Every other new action (`write_file`, `manage_release`, `manage_actions`, `manag
 
 A denial names the action, the rule or the default policy, and where to enable it (the Policy tab). For `create_branch` and `write_file` it also notes that plain git commands are not affected by the policy.
 
+## Calls from the client API
+
+`/v1/rest` and `/v1/graphql` calls from the `gh` shim are classified like `github_api` calls (see above) and checked against the same owner allowlist and rules. `POST /v1/git-credential` needs `read` on the repository, and gets a write-capable token only where `write_file` and `create_branch` are both allowed; `force_push` and `delete_branch` cannot be told apart by a git credential, so a write token can do both (use branch protection). See [client-api.md](client-api.md).
+
 ## Paths without an owner
 
 Your account, gists and notifications name no owner, so a call to them is denied unless `*` is an allowed owner (the default): `github_account` my_orgs and notifications without a `repo`, `github_gists` apart from `list` for a user, and `github_repo_manage` create without `owner`. Secrets are never returned: `github_repo_config` secrets lists names and dates, and no tool sets a secret value.
@@ -79,4 +83,4 @@ Your account, gists and notifications name no owner, so a call to them is denied
 
 ## Files
 
-`$PASEO_HOME/plugin-data/lerenn/paseo-github-proxy/`: `config.json` (settings, policy), `apps.json` (GitHub Apps: organization, ids, extra owners, default flag; no secret), `secrets.json` (App private keys, 0600), `cache.json` (response cache).
+`$PASEO_HOME/plugin-data/lerenn/paseo-github-proxy/`: `config.json` (settings, policy), `apps.json` (GitHub Apps: organization, ids, extra owners, default flag; no secret), `secrets.json` (App private keys, webhook secrets and the client API token, 0600), `cache.json` (response cache).

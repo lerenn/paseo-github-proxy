@@ -85,6 +85,8 @@
 <tr><td>Fall back to the other source on rate limit</td><td>Auth</td><td>off</td></tr>
 <tr><td>Allowed owners</td><td>Auth</td><td><code>*</code> (every owner)</td></tr>
 <tr><td>GitHub Apps (organization, App ID, installation ID, also-serves owners, default) and their private keys</td><td>Auth</td><td>none</td></tr>
+<tr><td>Webhook listener (port, bind address)</td><td>Auth</td><td>off, <code>8787</code>, <code>0.0.0.0</code></td></tr>
+<tr><td>Client API (port, bind address, bearer token, set up new agent sessions)</td><td>Auth</td><td>off, <code>8788</code>, <code>127.0.0.1</code>, no token, setup on</td></tr>
 <tr><td>Preset, default permissions, rules</td><td>Policy</td><td>Full, no rules</td></tr>
 <tr><td>Cache TTL in seconds (0 to 3600)</td><td>Policy</td><td>30</td></tr>
 <tr><td>Forbid direct use of gh, curl and raw GitHub</td><td>Policy</td><td>off</td></tr>

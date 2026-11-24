@@ -1,9 +1,9 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import contribute from "../index.server";
-import { activityRpc, appCredentialsClearRpc, appCredentialsSaveRpc, subscriptionsRpc, webhookSecretRpc, webhookStatusRpc, configGetRpc, configSaveRpc, dryRunRpc, overviewRpc, sourceCheckRpc } from "../shared/contracts";
+import { clientApiStatusRpc, clientTokenRpc, activityRpc, appCredentialsClearRpc, appCredentialsSaveRpc, subscriptionsRpc, webhookSecretRpc, webhookStatusRpc, configGetRpc, configSaveRpc, dryRunRpc, overviewRpc, sourceCheckRpc } from "../shared/contracts";
 import { defaultConfig, presetPolicy } from "../shared/config";
 import { HARD_RULE_MESSAGE } from "./hardrule";
 import { SOFT_RULE_METADATA_KEY, SOFT_RULE_PROMPT } from "./tools";
@@ -38,7 +38,7 @@ describe("server entry", () => {
     const { handlers, hooks } = load();
     expect([...handlers.keys()].sort()).toEqual(
       ["github-proxy.activity", "github-proxy.app.clear", "github-proxy.app.save",
-      "github-proxy.app.test", "github-proxy.clear", "github-proxy.config.get", "github-proxy.config.save", "github-proxy.discover.owners", "github-proxy.discover.repos", "github-proxy.dry-run", "github-proxy.overview", "github-proxy.source.check", "github-proxy.subscriptions", "github-proxy.subscriptions.remove", "github-proxy.webhook.secret", "github-proxy.webhook.status"].sort(),
+      "github-proxy.app.test", "github-proxy.clear", "github-proxy.client-api.status", "github-proxy.client-api.token", "github-proxy.config.get", "github-proxy.config.save", "github-proxy.discover.owners", "github-proxy.discover.repos", "github-proxy.dry-run", "github-proxy.overview", "github-proxy.source.check", "github-proxy.subscriptions", "github-proxy.subscriptions.remove", "github-proxy.webhook.secret", "github-proxy.webhook.status"].sort(),
     );
     expect(hooks.has("agent.open.before")).toBe(true);
   });
@@ -50,6 +50,35 @@ describe("server entry", () => {
     expect(out.tools.map((t: { name: string }) => t.name)).toContain("github_api");
     expect(out.appendSystemPrompt).toBeUndefined();
     expect(await hook({ request: request({ purpose: "history" }) }, {})).toBeUndefined();
+  });
+
+  it("client API: injects nothing while off, then the proxy URL, token and git helper for sessions opened after", async () => {
+    const { hooks, rpc, cleanup } = load();
+    const hook = hooks.get("agent.open.before")!;
+    expect((await hook({ request: request() }, {})).env).toEqual({});
+    const { config } = await rpc(configGetRpc);
+    expect(config.clientApi).toEqual({ enabled: false, port: 8788, bind: "127.0.0.1", injectEnv: true });
+    const { token } = await rpc(clientTokenRpc, { action: "generate" });
+    expect(token).toMatch(/^pgp_[0-9a-f]{48}$/);
+    await rpc(configSaveRpc, { config: { ...config, clientApi: { ...config.clientApi, enabled: true, port: 38788 } } });
+    const env = (await hook({ request: request({ env: { KEEP: "1" } }) }, {})).env;
+    expect(env).toMatchObject({ KEEP: "1", GH_PROXY_URL: "http://127.0.0.1:38788", GH_PROXY_TOKEN: token, GIT_CONFIG_COUNT: "3", GIT_CONFIG_KEY_2: "credential.https://github.com.useHttpPath", GIT_CONFIG_VALUE_2: "true" });
+    expect(env.GIT_CONFIG_VALUE_1).toMatch(/^!node '.*git-credential-helper\.mjs'$/);
+    expect(await hook({ request: request({ purpose: "history" }) }, {})).toBeUndefined();
+    // the injection is its own switch
+    await rpc(configSaveRpc, { config: { ...config, clientApi: { ...config.clientApi, enabled: true, port: 38788, injectEnv: false } } });
+    expect((await hook({ request: request() }, {})).env).toEqual({});
+    const status = await rpc(clientApiStatusRpc);
+    expect(status).toMatchObject({ enabled: true, listening: true, port: 38788, loopback: true, tokenSet: true, helperFound: true });
+    // the token is in the 0600 secrets file only, never in config.json or a status answer
+    const dir = path.join(home, "plugin-data", "lerenn", "paseo-github-proxy");
+    expect(statSync(path.join(dir, "secrets.json")).mode & 0o777).toBe(0o600);
+    expect(readFileSync(path.join(dir, "secrets.json"), "utf8")).toContain(token);
+    expect(readFileSync(path.join(dir, "config.json"), "utf8")).not.toContain(token);
+    expect(JSON.stringify(status)).not.toContain(token);
+    expect(JSON.stringify(await rpc(configGetRpc))).not.toContain(token);
+    expect(await rpc(clientTokenRpc, { action: "clear" })).toEqual({ tokenSet: false, token: "" });
+    cleanup();
   });
 
   it("the soft rule, once saved, reaches the system prompt of the next session", async () => {

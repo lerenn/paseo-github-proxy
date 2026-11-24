@@ -55,6 +55,26 @@ export const webhooksSchema = z.object({
 export type WebhooksConfig = z.infer<typeof webhooksSchema>;
 export const WEBHOOK_PATH = "/webhook";
 
+/**
+ * The optional client API: a local HTTP listener for the `gh` shim (`GH_PROXY_URL`) and the git credential helper. It is
+ * a separate server from the webhook listener, on its own port, and loopback by default: never put it behind the tunnel.
+ */
+export const clientApiSchema = z.object({
+  enabled: z.boolean().default(false),
+  port: z.number().int().min(1).max(65535).default(8788),
+  /** Loopback by default. Any other address needs a bearer token (generate one in Auth) and is a deliberate choice. */
+  bind: z.string().trim().min(1).max(64).default("127.0.0.1"),
+  /** Put GH_PROXY_URL, GH_PROXY_TOKEN and the git credential helper into the environment of every new agent session. */
+  injectEnv: z.boolean().default(true),
+});
+export type ClientApiConfig = z.infer<typeof clientApiSchema>;
+
+/** True for an address that only this machine can reach. */
+export const isLoopbackAddress = (host: string): boolean => {
+  const h = host.trim().toLowerCase().replace(/^\[|\]$/g, "");
+  return h === "localhost" || h === "::1" || /^127(?:\.\d{1,3}){3}$/.test(h) || h === "::ffff:127.0.0.1";
+};
+
 export const configSchema = z.object({
   activeSource: z.enum(SOURCES).default("gh"),
   fallbackOnRateLimit: z.boolean().default(false),
@@ -65,6 +85,7 @@ export const configSchema = z.object({
   /** The hard rule: deny permission requests for gh, and curl or wget aimed at GitHub. Off by default. */
   blockRawGithub: z.boolean().default(false),
   webhooks: webhooksSchema.default({ enabled: false, port: 8787, bind: "0.0.0.0" }),
+  clientApi: clientApiSchema.default({ enabled: false, port: 8788, bind: "127.0.0.1", injectEnv: true }),
   policy: policySchema.default({ preset: "full", defaultAllow: [...PRESET_INFO.full.allow], rules: [], actionsVersion: CATALOG_VERSION }),
 });
 export type Config = z.infer<typeof configSchema>;

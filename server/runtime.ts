@@ -1,8 +1,12 @@
+import { existsSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { ActivityLog } from "./activity";
 import { AppPool } from "./apps";
 import { GhCliSource, type FetchFn } from "./auth";
 import { ResponseCache } from "./cache";
+import { ClientApi, ClientApiServer } from "./clientapi";
+import { GitCredentials } from "./gitcred";
 import { staleKeyTest } from "./events";
 import { GithubProxy } from "./proxy";
 import { RateLimitTracker } from "./ratelimit";
@@ -10,6 +14,16 @@ import { ConfigStore, dataDir } from "./store";
 import { SubscriptionStore } from "./subscriptions";
 import { WakeService, type AgentSender } from "./wakeups";
 import { WebhookReceiver, WebhookServer } from "./webhook";
+
+/** The credential helper script that ships next to this file; null when the plugin was bundled without it. */
+export function helperPath(): string | null {
+  try {
+    const file = fileURLToPath(new URL("./git-credential-helper.mjs", import.meta.url));
+    return existsSync(file) ? file : null;
+  } catch {
+    return null;
+  }
+}
 
 export const nodeFetch: FetchFn = async (url, init) => {
   const res = await fetch(url, { method: init.method, headers: init.headers, ...(init.body !== undefined ? { body: init.body } : {}), signal: AbortSignal.timeout(30_000) as never });
@@ -42,8 +56,16 @@ export function createRuntime(dir = dataDir(), fetchFn: FetchFn = nodeFetch) {
   });
   const webhooks = new WebhookServer(receiver, () => store.webhookSecrets().length, (m) => console.error(`[github-proxy] ${m}`));
 
+  const git = new GitCredentials({ proxy, apps: () => store.apps(), credentials: (id) => store.appCredentials(id), fetch: fetchFn });
+  const clientApi = new ClientApiServer(
+    new ClientApi({ proxy, git, token: () => store.clientToken(), log: (m) => console.error(`[github-proxy] ${m}`) }),
+    () => !!store.clientToken(),
+    () => helperPath() !== null,
+    (m) => console.error(`[github-proxy] ${m}`),
+  );
+
   return {
-    store, cache, tracker, activity, gh, apps, proxy, subscriptions, wake, webhooks,
+    git, clientApi, store, cache, tracker, activity, gh, apps, proxy, subscriptions, wake, webhooks,
     /** Remembers the SDK handle of the context a hook, tool or RPC runs in. */
     capturePaseo(handle: AgentSender | undefined): void {
       if (handle) paseo = handle;
@@ -51,6 +73,7 @@ export function createRuntime(dir = dataDir(), fetchFn: FetchFn = nodeFetch) {
     dispose: () => {
       cache.flush();
       void webhooks.stop();
+      void clientApi.stop();
     },
   };
 }
