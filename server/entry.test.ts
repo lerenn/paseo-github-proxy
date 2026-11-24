@@ -143,7 +143,7 @@ describe("server entry", () => {
     const { rpc } = load();
     const { generateKeyPairSync } = await import("node:crypto");
     const pem = generateKeyPairSync("rsa", { modulusLength: 2048, privateKeyEncoding: { type: "pkcs8", format: "pem" }, publicKeyEncoding: { type: "spki", format: "pem" } }).privateKey;
-    expect(await rpc(webhookStatusRpc)).toMatchObject({ enabled: false, listening: false, bind: "127.0.0.1", path: "/webhook", appsWithSecret: 0 });
+    expect(await rpc(webhookStatusRpc)).toMatchObject({ enabled: false, listening: false, bind: "0.0.0.0", path: "/webhook", appsWithSecret: 0 });
     const a = await rpc(appCredentialsSaveRpc, { organization: "Org", appId: "1", installationId: "2", owners: [], privateKey: pem });
     const made = await rpc(webhookSecretRpc, { id: a.id, action: "generate" });
     expect(made.secret).toMatch(/^[0-9a-f]{64}$/);
