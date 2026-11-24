@@ -7,6 +7,7 @@ import { sourceCheckRpc } from "../shared/contracts";
 import { SOURCE_OPTIONS, summarize } from "./format";
 import { AppsPanel } from "./apps";
 import { Banner, BannerText, Button, Card, Heading, Muted, MultiSelect, Pill, Toggle, type Theme } from "./ui-kit";
+import { WebhooksCard } from "./webhooks";
 import { useOwnerChoices, type useConfigData } from "./data";
 
 type ConfigData = ReturnType<typeof useConfigData>;
@@ -101,6 +102,7 @@ export function AuthTab({ theme, data }: { theme: Theme; data: ConfigData }) {
           hint={`When ${config.activeSource === "gh" ? "the gh CLI" : "the GitHub App serving the owner"} is rate limited, calls use ${other === "gh" ? "the gh CLI" : "the GitHub App serving the owner"} instead (if it is set up) until the limit resets.`}
         />
       </Card>
+      <WebhooksCard theme={theme} config={config} apps={apps} data={data} />
       <Owners theme={theme} config={config} data={data} apps={apps.length} />
     </View>
   );

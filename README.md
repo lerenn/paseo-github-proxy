@@ -8,6 +8,7 @@ A [Paseo](https://paseo.sh) plugin that gives every agent policy-controlled, cac
 - **Rate limits handled.** Live remaining/limit per credential source, a "retry at HH:MM" error to the agent when exhausted, one limit per GitHub App, optional fallback to the other credential source.
 - **Clear denials.** The agent is told which rule denied a call and why, so it stops retrying.
 - **Parity with `gh`.** Pull requests, issues, commits, files, releases, workflow runs and logs, labels, gists, projects, secret names and variables, rulesets, organizations and notifications, each as a typed tool with its own policy action. [docs/gh-parity.md](docs/gh-parity.md) lists every `gh` command and what is left out and why.
+- **Optional webhooks.** Off by default. With a webhook listener, GitHub pushes events to the plugin: cached reads are invalidated at once, and agents can ask to be woken when checks finish, a review or comment arrives, or a PR is merged (`github_subscribe`).
 - **A full-screen page** (sidebar → GitHub Proxy) with Overview, Auth, Policy and Activity tabs.
 
 The logic is a TypeScript port of an internal Go service (GitHub App JWT and installation tokens, REST/GraphQL access, ETag cache, rate-limit handling, policy and owner allowlist). It runs inside the plugin server: no external service.
@@ -66,11 +67,27 @@ Examples:
 - PR workflow everywhere, never merge or delete branches in prod: preset *PR workflow* + deny rule `acme/prod` for `merge, delete_branch, force_push`, reason "humans merge prod".
 - Everything allowed except force pushes: preset *Full* + deny rule `*` for `force_push`.
 
-Actions: `read`, `comment`, `review`, `create_issue`, `create_pr`, `update_pr`, `merge`, `delete_branch`, `force_push`, `create_branch`, `write_file`, `manage_labels`, `manage_release`, `manage_actions`, `manage_variables`, `create_repo`, `edit_repo`, `manage_gists`, `manage_notifications`, `manage_project`, `generic_api_read`, `generic_api_write`. The reads of every tool are `read`; file writes, releases, workflow runs, variables, repository creation and edits, gists and projects are separate actions, none in the PR workflow preset. The generic `github_api` tool is classified from the request: a `PUT .../pulls/N/merge` needs `merge` **and** `generic_api_write`, so the generic tool never bypasses a rule on a specific action. The **Test this call** box shows the verdict for any REST path or GraphQL document without sending it.
+Actions: `read`, `comment`, `review`, `create_issue`, `create_pr`, `update_pr`, `merge`, `delete_branch`, `force_push`, `create_branch`, `write_file`, `manage_labels`, `manage_release`, `manage_actions`, `manage_variables`, `create_repo`, `edit_repo`, `manage_gists`, `manage_notifications`, `manage_project`, `subscribe_events`, `generic_api_read`, `generic_api_write`. The reads of every tool are `read`; file writes, releases, workflow runs, variables, repository creation and edits, gists and projects are separate actions, none in the PR workflow preset. The generic `github_api` tool is classified from the request: a `PUT .../pulls/N/merge` needs `merge` **and** `generic_api_write`, so the generic tool never bypasses a rule on a specific action. The **Test this call** box shows the verdict for any REST path or GraphQL document without sending it.
 
 The same tab holds the **cache TTL** (30 s by default) and the **Forbid direct use of gh/curl/raw GitHub** checkbox, which adds an instruction to every agent's system prompt and tool descriptions to use the `github_*` tools. It is a soft rule, not a sandbox. The instruction says the `github_*` tools win over a project AGENTS.md that allows `gh`, unless you explicitly ask for `gh`. On Paseo 0.16 it is saved in the system prompt when an agent is created, so only agents created after you turn it on get it; from 0.17 it is also added each time a session opens.
 
 The **Block gh/curl commands (hard)** checkbox (off by default) goes further than the soft rule: when an agent asks permission to run a shell command that runs `gh`, or `curl` or `wget` against github.com, api.github.com or githubusercontent.com, the plugin denies the request with a message that points to the `github_*` tools and says not to retry. It matches command words after pipes, `&&`, `;`, subshells, env prefixes, `sudo` and `bash -c`, so `git` and `grep gh` pass. Denials appear in the Activity tab as `hard rule`. Its limits: it only sees commands the agent raises a permission request for, so an agent in a bypass or auto-approve mode never triggers it; it is pattern matching, not a sandbox, so a script file or a command built at run time gets through. For a real block, add network or egress rules on the daemon machine.
+
+### 4. Webhooks and wake-ups (optional, Auth tab)
+
+Off by default. With it off, nothing listens and reads stay fresh by TTL and ETag revalidation as before.
+
+1. Open a saved GitHub App and press **Generate** under *Webhook secret*. The value is shown once; it is stored only in `secrets.json` (mode 0600) and the screen only ever learns "set" or "not set".
+2. In the Auth tab turn on **Receive GitHub webhooks**, pick a port (default 8787) and a bind address (default `127.0.0.1`).
+3. In the GitHub App's settings set the Webhook URL, the same secret, content type `application/json`, and subscribe to pull requests, reviews, comments, checks, statuses and workflow runs.
+
+**GitHub needs a public URL.** The listener is at `http://<bind>:<port>/webhook` on the daemon machine; the plugin does not create a tunnel. Put a tunnel or reverse proxy in front of it (for example `cloudflared tunnel --url http://127.0.0.1:8787`) and give GitHub that public address ending in `/webhook`. `GET /healthz` answers `ok`.
+
+What the listener accepts: only `POST /webhook` (bodies up to 1 MiB) with a valid `X-Hub-Signature-256` (HMAC-SHA256 over the raw body, constant-time compare). Every App's secret is tried; the App that matches signed it, and the event's owner must be one that App serves (its organization and extra owners, or the owners only the default App serves), otherwise `403` with no detail. `ping` and events the plugin does not use answer `200` and do nothing. A repeated `X-GitHub-Delivery` id is dropped. The Auth tab shows whether it listens, the last delivery time and counters (accepted, ignored, duplicates, bad signature, wrong owner). Secrets, payloads and signatures are never logged.
+
+**Fresh cache.** An accepted event drops the cached reads it makes stale: pull request, issue, comment, review, commit, check and workflow reads of that repository, its repository page, GraphQL and search answers (a push drops the repository). It invalidates rather than patches. A read racing with an event can still store the old answer until the next event or the TTL; ETag revalidation remains the fallback.
+
+**Wake-ups.** `github_subscribe` lets an agent say "wake me when X": `events` (`checks_completed`, `review_submitted`, `comment_added`, `pr_opened`, `pr_merged`, `pr_closed`), a `repo`, optionally a `pr` number and/or `sha` (an event for either matches), optionally `conclusion` (`success`, `failure`, `approved`, `changes_requested`, ...). One-shot by default, `persistent` keeps firing. It expires after 6 hours by default, at most 7 days; at most 20 per agent. Subscriptions are kept in `subscriptions.json`, tied to the agent, and listed (with Unsubscribe) in the Activity tab. When an event matches, the agent gets a short prompt through the Paseo SDK (`paseo.agents.ref(id).send(...)`, steering a running turn rather than interrupting it) with the event, repository, PR and a hint to read details with the `github_*` tools. The only GitHub text in it is a title, cut to 100 characters and quoted. Wake-ups are limited to 6 per agent per minute, and the subscriptions of an archived or missing agent are dropped. The `subscribe_events` action is in the PR workflow and Full presets and denied in the read-only default (it changes nothing on GitHub, but it makes the plugin prompt the agent; allow it with a rule if read-only agents need it). Note that a pull request has one `checks_completed` event per finished check suite, so use a `conclusion` filter or re-check with `github_checks` after the wake-up.
 
 ## Tools
 
@@ -107,6 +124,7 @@ Related operations are grouped behind one tool with an `operation` input (for ex
 | `github_account` | Users, organizations, members, teams, repositories of an owner, your account and organizations, notifications, mark as read. | read or manage_notifications, by operation |
 | `github_gists` | List, get, create, edit, delete gists. | read or manage_gists, by operation |
 | `github_project` | List and view GitHub Projects (v2), list items; add an item, set a field. | read or manage_project, by operation |
+| `github_subscribe` | Ask to be woken by a GitHub event instead of polling: subscribe, list, unsubscribe. Needs the webhook listener. | subscribe_events (subscribe only) |
 | `github_api` | REST or GraphQL for what the others do not cover. | generic_api_read / generic_api_write + the specific action |
 
 `repo` can be omitted: it is inferred from the agent's working directory (`origin` remote).
@@ -117,7 +135,7 @@ Related operations are grouped behind one tool with an `operation` input (for ex
 2. Cache: fresh within the TTL → served locally. Otherwise a conditional request with `If-None-Match`; a `304` costs no rate limit and restarts the clock.
 3. Auth source: the active one, then the other if fallback is on. With Apps, the App is chosen by the owner of the call (the App claiming it, else the default App); a call spanning owners of two Apps is refused. A credential that is rate limited is skipped until its reset.
 4. Rate limit: `x-ratelimit-*` headers are tracked per credential (the `gh` CLI and each App) and resource (`core`, `graphql`, `search`). A primary limit, a `retry-after` or a secondary-limit response blocks that credential until the reset; the other Apps are not affected. With nothing left to try, a cached answer is served stale, or the agent receives `Retry at HH:MM`.
-5. Writes invalidate the cached reads of that repository. Cached answers are keyed by credential (`gh` or the App), so an answer fetched with one identity is never served to another.
+5. Writes invalidate the cached reads of that repository, and so does a verified webhook event for it (see Webhooks). Cached answers are keyed by credential (`gh` or the App), so an answer fetched with one identity is never served to another.
 
 ## Website
 
@@ -140,4 +158,5 @@ Tests mock GitHub and `gh`; no network and no real credentials are used. See [AG
 - The soft rule cannot stop an agent that has a shell from running `gh`; it is an instruction.
 - The hard rule only sees permission requests (nothing in bypass mode) and matches command text; it is not a sandbox. Block egress to GitHub on the daemon machine for a real block.
 - GraphQL scoping is best effort: it checks the repo you pass and `owner:` literals in the query; node-ID queries are refused unless every owner is allowed.
+- Webhooks need a public URL that you provide. Wake-ups need the plugin to hold a Paseo SDK handle: it takes one from the first session open or screen request after a daemon restart, so an event arriving before that is not delivered to the agent (its subscription is kept).
 - Activity and counters are in memory (reset on plugin restart); config and cache persist.

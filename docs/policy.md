@@ -52,8 +52,9 @@ Curated tools state their action directly and do not need `generic_api_*`. A too
 | `manage_gists` | `github_gists` create, edit, delete | low |
 | `manage_notifications` | `github_account` mark_read | low |
 | `manage_project` | `github_project` add_item, set_field | low |
+| `subscribe_events` | `github_subscribe` subscribe (list and unsubscribe only touch the agent's own subscriptions and are not checked) | low |
 
-`update_pr` also covers labels, assignees, locking, reviewers, marking ready or draft, updating the branch, and editing or deleting comments; `merge` also covers auto-merge and syncing a fork. The PR workflow preset adds `create_branch`, `manage_labels` and `manage_notifications` to what it allowed before. Presets saved by an earlier version keep their stored list: new actions are denied until you check them.
+`update_pr` also covers labels, assignees, locking, reviewers, marking ready or draft, updating the branch, and editing or deleting comments; `merge` also covers auto-merge and syncing a fork. The PR workflow preset adds `create_branch`, `manage_labels` and `manage_notifications` to what it allowed before. `subscribe_events` is allowed by the PR workflow and Full presets and denied by Read-only. Presets saved by an earlier version keep their stored list: new actions are denied until you check them.
 
 ## Paths without an owner
 

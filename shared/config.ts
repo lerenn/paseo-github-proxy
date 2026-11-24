@@ -23,6 +23,16 @@ export type Policy = z.infer<typeof policySchema>;
 export const SOURCES = ["gh", "app"] as const;
 export type SourceId = (typeof SOURCES)[number];
 
+/** The optional webhook listener that lets GitHub push events to the plugin. Off by default. */
+export const webhooksSchema = z.object({
+  enabled: z.boolean().default(false),
+  port: z.number().int().min(1).max(65535).default(8787),
+  /** Address the listener binds to. Loopback by default: put a tunnel or reverse proxy in front to reach it from GitHub. */
+  bind: z.string().trim().min(1).max(64).default("127.0.0.1"),
+});
+export type WebhooksConfig = z.infer<typeof webhooksSchema>;
+export const WEBHOOK_PATH = "/webhook";
+
 export const configSchema = z.object({
   activeSource: z.enum(SOURCES).default("gh"),
   fallbackOnRateLimit: z.boolean().default(false),
@@ -32,6 +42,7 @@ export const configSchema = z.object({
   forbidRawGithub: z.boolean().default(false),
   /** The hard rule: deny permission requests for gh, and curl or wget aimed at GitHub. Off by default. */
   blockRawGithub: z.boolean().default(false),
+  webhooks: webhooksSchema.default({ enabled: false, port: 8787, bind: "127.0.0.1" }),
   policy: policySchema.default({ preset: "read_only", defaultAllow: [...PRESET_INFO.read_only.allow], rules: [] }),
 });
 export type Config = z.infer<typeof configSchema>;
@@ -99,6 +110,8 @@ export const appCredentialsViewSchema = z.object({
   owners: z.array(z.string()),
   default: z.boolean(),
   configured: z.boolean(),
+  /** Whether a webhook secret is stored for this App (the value itself is never sent). */
+  webhookSecretSet: z.boolean().default(false),
   /** Short fingerprint of the private key, to tell two keys apart. */
   keyFingerprint: z.string(),
 });

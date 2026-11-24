@@ -36,6 +36,47 @@ export const appCredentialsSaveRpc = defineRpc({
   output: z.object({ apps: z.array(appCredentialsViewSchema), id: z.string() }),
 });
 
+/** Generates (`generate`) or removes (`clear`) an App's webhook secret. The new value is in the answer once and can not be read again. */
+export const webhookSecretRpc = defineRpc({
+  name: "github-proxy.webhook.secret",
+  input: z.object({ id: z.string(), action: z.enum(["generate", "clear"]) }),
+  output: z.object({ apps: z.array(appCredentialsViewSchema), secret: z.string() }),
+});
+
+export const webhookStatusRpc = defineRpc({
+  name: "github-proxy.webhook.status",
+  input: z.object({}),
+  output: z.object({
+    enabled: z.boolean(),
+    listening: z.boolean(),
+    port: z.number(),
+    bind: z.string(),
+    path: z.string(),
+    error: z.string(),
+    lastDeliveryAt: z.number().nullable(),
+    counters: z.object({ accepted: z.number(), badSignature: z.number(), badOwner: z.number(), ignored: z.number(), duplicate: z.number() }),
+    appsWithSecret: z.number(),
+  }),
+});
+
+export const subscriptionViewSchema = z.object({
+  id: z.string(),
+  agentId: z.string(),
+  agentTitle: z.string(),
+  repo: z.string(),
+  number: z.number().nullable(),
+  sha: z.string(),
+  events: z.array(z.string()),
+  conclusions: z.array(z.string()),
+  persistent: z.boolean(),
+  createdAt: z.number(),
+  expiresAt: z.number(),
+  fired: z.number(),
+});
+
+export const subscriptionsRpc = defineRpc({ name: "github-proxy.subscriptions", input: z.object({}), output: z.object({ subscriptions: z.array(subscriptionViewSchema) }) });
+export const subscriptionRemoveRpc = defineRpc({ name: "github-proxy.subscriptions.remove", input: z.object({ id: z.string() }), output: z.object({ subscriptions: z.array(subscriptionViewSchema) }) });
+
 export const appCredentialsClearRpc = defineRpc({ name: "github-proxy.app.clear", input: z.object({ id: z.string() }), output: z.object({ apps: z.array(appCredentialsViewSchema) }) });
 
 export const sourceCheckRpc = defineRpc({

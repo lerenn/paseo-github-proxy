@@ -22,6 +22,7 @@ export const ACTIONS = [
   "manage_gists",
   "manage_notifications",
   "manage_project",
+  "subscribe_events",
   "generic_api_read",
   "generic_api_write",
 ] as const;
@@ -49,6 +50,7 @@ export const ACTION_INFO: Record<Action, { label: string; hint: string; risk: "s
   manage_gists: { label: "Manage gists", hint: "Create, edit and delete gists.", risk: "low" },
   manage_notifications: { label: "Manage notifications", hint: "Mark notifications as read or done.", risk: "low" },
   manage_project: { label: "Manage projects", hint: "Add items to GitHub Projects and change their field values.", risk: "low" },
+  subscribe_events: { label: "Subscribe to events", hint: "Ask to be woken by a GitHub event (checks done, review, comment, merge) on a repository, with github_subscribe. Needs the webhook listener. Reads nothing and changes nothing on GitHub.", risk: "low" },
   generic_api_read: { label: "Generic API (read)", hint: "github_api GET requests and GraphQL queries.", risk: "low" },
   generic_api_write: { label: "Generic API (write)", hint: "github_api writes: any non-GET REST call and GraphQL mutations.", risk: "high" },
 };
@@ -61,7 +63,7 @@ export const PRESET_INFO: Record<Preset, { label: string; hint: string; allow: r
   pr_workflow: {
     label: "PR workflow",
     hint: "Read, comment, review, open issues and PRs and update them, create branches, manage labels and notifications. No merge, no branch deletion, no force push, no file writes, no releases, no workflow runs, no generic writes.",
-    allow: ["read", "generic_api_read", "comment", "review", "create_issue", "create_pr", "update_pr", "create_branch", "manage_labels", "manage_notifications"],
+    allow: ["read", "generic_api_read", "comment", "review", "create_issue", "create_pr", "update_pr", "create_branch", "manage_labels", "manage_notifications", "subscribe_events"],
   },
   full: { label: "Full", hint: "Everything is allowed. Use the rules to carve out exceptions.", allow: ACTIONS },
 };

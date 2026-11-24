@@ -196,6 +196,17 @@ export class GithubProxy {
     });
   }
 
+  /**
+   * Policy check for a curated tool that does not call GitHub (github_subscribe): owner allowlist and policy for the
+   * stated actions, the outcome in the activity log. Throws a denial written for the agent.
+   */
+  authorize(ctx: CallContext, repo: string, actions: Action[], detail = ""): void {
+    const classified: Classified = { repo, owners: repo ? [repo.split("/")[0]!.toLowerCase()] : [], actions };
+    const verdict = this.judge(classified);
+    if (!verdict.allowed) this.refuse(ctx, classified, verdict.message);
+    this.record(ctx, classified, "allowed", { detail, started: this.clock() });
+  }
+
   private refuse(ctx: CallContext, c: Classified, message: string): never {
     this.record(ctx, c, "denied", { detail: message, started: this.clock() });
     throw new ProxyError("denied", message);

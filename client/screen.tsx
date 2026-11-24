@@ -8,6 +8,7 @@ import { useActivityData, useConfigData, useOverviewData } from "./data";
 import { githubIcon } from "./icons";
 import { OverviewTab } from "./overview";
 import { PolicyTab } from "./policy";
+import { EventsCard } from "./webhooks";
 
 export const SCREEN_ID = "github-proxy";
 const TABS = [
@@ -58,7 +59,7 @@ export function GithubProxyScreen({ theme, layout }: PluginScreenProps) {
         {tab === "overview" ? <OverviewTab theme={theme} data={overview.data} fallback={config.config?.fallbackOnRateLimit ?? false} onClearCache={() => config.clearData.mutate("cache")} onOpenAuth={() => setTab("auth")} /> : null}
         {tab === "auth" ? <AuthTab theme={theme} data={config} /> : null}
         {tab === "policy" ? <PolicyTab theme={theme} data={config} /> : null}
-        {tab === "activity" ? <ActivityTab theme={theme} entries={activity.data?.entries} onClear={() => config.clearData.mutate("activity")} /> : null}
+        {tab === "activity" ? <View style={{ gap: 16 }}><EventsCard theme={theme} /><ActivityTab theme={theme} entries={activity.data?.entries} onClear={() => config.clearData.mutate("activity")} /></View> : null}
       </ScrollView>
     </View>
   );

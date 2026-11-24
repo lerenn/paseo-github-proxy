@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { z } from "zod";
 import { defineAgentTool, type AgentToolContext, type AgentToolDefinition, type AgentToolResult } from "@getpaseo/plugin/server";
 import type { Action } from "../shared/actions";
+import type { SubscriptionStore } from "./subscriptions";
 import { ProxyError, type CallContext, type GithubProxy, type ProxyResponse } from "./proxy";
 
 /** Helpers shared by every group of agent tools (tools.ts and the tools-*.ts files). */
@@ -25,6 +26,10 @@ export interface ToolsDeps {
   proxy: GithubProxy;
   /** Appends the "use these tools, not gh/curl" sentence to every description. */
   softRule: boolean;
+  /** The agent's subscriptions (github_subscribe). */
+  subscriptions?: SubscriptionStore;
+  /** Told the Paseo SDK handle of every tool call, for the webhook wake-ups. */
+  onContext?: (paseo: AgentToolContext["paseo"]) => void;
   /** Where to find the origin of a working directory; replaceable in tests. */
   remoteOf?: (cwd: string) => Promise<string>;
 }
@@ -71,6 +76,7 @@ export type Query = Record<string, string | number | undefined>;
 
 export interface Kit {
   proxy: GithubProxy;
+  subscriptions?: SubscriptionStore;
   tool<S extends z.ZodType>(name: string, description: string, input: S, run: (input: z.output<S>, ctx: AgentToolContext, call: Call) => Promise<string>): AgentToolDefinition;
   /** A cacheable read (action: read). */
   get(c: Call, path: string, query?: Query, accept?: string): Promise<ProxyResponse>;
@@ -97,6 +103,7 @@ export function createKit(deps: ToolsDeps): Kit {
 
   return {
     proxy,
+    ...(deps.subscriptions ? { subscriptions: deps.subscriptions } : {}),
     tool(name, description, input, run) {
       return defineAgentTool({
         name,
@@ -104,6 +111,7 @@ export function createKit(deps: ToolsDeps): Kit {
         input,
         async execute(args, ctx): Promise<AgentToolResult> {
           try {
+            deps.onContext?.(ctx.paseo);
             return { text: await run(args, ctx, makeCall(ctx, name)) };
           } catch (error) {
             if (error instanceof ProxyError) return { isError: true, text: error.message };
