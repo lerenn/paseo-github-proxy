@@ -37,7 +37,8 @@ describe("server entry", () => {
   it("registers every RPC and the session-open hook", () => {
     const { handlers, hooks } = load();
     expect([...handlers.keys()].sort()).toEqual(
-      ["github-proxy.activity", "github-proxy.app.clear", "github-proxy.app.save", "github-proxy.clear", "github-proxy.config.get", "github-proxy.config.save", "github-proxy.discover.owners", "github-proxy.discover.repos", "github-proxy.dry-run", "github-proxy.overview", "github-proxy.source.check"].sort(),
+      ["github-proxy.activity", "github-proxy.app.clear", "github-proxy.app.save",
+      "github-proxy.app.test", "github-proxy.clear", "github-proxy.config.get", "github-proxy.config.save", "github-proxy.discover.owners", "github-proxy.discover.repos", "github-proxy.dry-run", "github-proxy.overview", "github-proxy.source.check"].sort(),
     );
     expect(hooks.has("agent.open.before")).toBe(true);
   });

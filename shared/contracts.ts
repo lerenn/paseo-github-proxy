@@ -44,6 +44,32 @@ export const sourceCheckRpc = defineRpc({
   output: z.object({ ok: z.boolean(), detail: z.string(), account: z.string() }),
 });
 
+const checkStepSchema = z.object({
+  id: z.enum(["key", "app", "installation", "token", "api", "owners"]),
+  title: z.string(),
+  status: z.enum(["ok", "warn", "fail", "skipped"]),
+  detail: z.string(),
+  diagnosis: z.string(),
+});
+
+/** Tests an App's connection step by step, on the saved credentials or the edited form values. Nothing is saved; an empty `privateKey` uses the stored one. */
+export const appTestRpc = defineRpc({
+  name: "github-proxy.app.test",
+  input: z.object({
+    id: z.string().default(""),
+    organization: z.string().default(""),
+    appId: z.string().default(""),
+    installationId: z.string().default(""),
+    owners: z.array(z.string()).default([]),
+    privateKey: z.string().default(""),
+  }),
+  output: z.object({
+    ok: z.boolean(),
+    steps: z.array(checkStepSchema),
+    installations: z.array(z.object({ id: z.string(), login: z.string(), type: z.string() })),
+  }),
+});
+
 export const activityRpc = defineRpc({ name: "github-proxy.activity", input: z.object({ limit: z.number().int().min(1).max(500).default(200) }), output: z.object({ entries: z.array(activityEntrySchema) }) });
 
 export const clearRpc = defineRpc({ name: "github-proxy.clear", input: z.object({ what: z.enum(["cache", "activity"]) }), output: z.object({ ok: z.boolean() }) });
