@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countdown, percent, presetOf, splitList, summarize, toggleChecked, withAlpha } from "./format";
+import { SOURCE_OPTIONS, countdown, percent, presetOf, splitList, summarize, toggleChecked, withAlpha } from "./format";
 
 describe("format", () => {
   it("counts down", () => {
@@ -33,5 +33,11 @@ describe("format", () => {
     expect(summarize(["*"], o)).toBe("All owners (*)");
     expect(summarize(["acme"], o)).toBe("acme");
     expect(summarize(["a", "b", "c"], o)).toBe("3 selected");
+  });
+});
+
+describe("source options", () => {
+  it("lists both sources once, gh first", () => {
+    expect(SOURCE_OPTIONS.map((o) => o.id)).toEqual(["gh", "app"]);
   });
 });

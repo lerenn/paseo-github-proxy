@@ -4,29 +4,26 @@ import { useMutation } from "@tanstack/react-query";
 import { Pressable, Text, View } from "react-native";
 import type { Config, SourceId } from "../shared/config";
 import { sourceCheckRpc } from "../shared/contracts";
-import { summarize } from "./format";
+import { SOURCE_OPTIONS, summarize } from "./format";
 import { AppsPanel } from "./apps";
 import { Banner, BannerText, Button, Card, Heading, Muted, MultiSelect, Pill, Toggle, type Theme } from "./ui-kit";
 import { useOwnerChoices, type useConfigData } from "./data";
 
 type ConfigData = ReturnType<typeof useConfigData>;
 
-function SourceChoice({ theme, id, title, text, icon, active, onPick, children }: { theme: Theme; id: SourceId; title: string; text: string; icon: string; active: boolean; onPick(id: SourceId): void; children: React.ReactNode }) {
+function SourceRow({ theme, option, active, onPick }: { theme: Theme; option: (typeof SOURCE_OPTIONS)[number]; active: boolean; onPick(id: SourceId): void }) {
   return (
-    <View style={{ flexGrow: 1, flexBasis: 320, gap: 12, padding: 16, borderRadius: 14, borderWidth: 2, borderColor: active ? theme.colors.accent : theme.colors.border, backgroundColor: theme.colors.surface1 }}>
-      <Pressable accessibilityRole="radio" accessibilityState={{ selected: active }} accessibilityLabel={`Use ${title}`} onPress={() => onPick(id)} style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
-        <View style={{ width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: active ? theme.colors.accent : theme.colors.foregroundMuted, alignItems: "center", justifyContent: "center" }}>
-          {active ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: theme.colors.accent }} /> : null}
-        </View>
-        <Icon name={icon} size={16} color={theme.colors.foreground} />
-        <View style={{ flex: 1, gap: 2 }}>
-          <Text style={{ color: theme.colors.foreground, fontSize: 15, fontWeight: "600" }}>{title}</Text>
-          <Muted theme={theme}>{text}</Muted>
-        </View>
-        {active ? <Pill theme={theme} label="Active" tone="info" /> : null}
-      </Pressable>
-      {children}
-    </View>
+    <Pressable accessibilityRole="radio" accessibilityState={{ selected: active }} accessibilityLabel={`Use ${option.title}`} onPress={() => onPick(option.id)} style={{ flexDirection: "row", gap: 10, alignItems: "center", padding: 12, borderRadius: 12, borderWidth: 2, borderColor: active ? theme.colors.accent : theme.colors.border, backgroundColor: theme.colors.surface1 }}>
+      <View style={{ width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: active ? theme.colors.accent : theme.colors.foregroundMuted, alignItems: "center", justifyContent: "center" }}>
+        {active ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: theme.colors.accent }} /> : null}
+      </View>
+      <Icon name={option.icon} size={16} color={theme.colors.foreground} />
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={{ color: theme.colors.foreground, fontSize: 15, fontWeight: "600" }}>{option.title}</Text>
+        <Muted theme={theme}>{option.text}</Muted>
+      </View>
+      {active ? <Pill theme={theme} label="Active" tone="info" /> : null}
+    </Pressable>
   );
 }
 
@@ -86,14 +83,15 @@ export function AuthTab({ theme, data }: { theme: Theme; data: ConfigData }) {
   const pick = (id: SourceId) => data.change((c) => ({ ...c, activeSource: id }));
   return (
     <View style={{ gap: 16 }}>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
-        <SourceChoice theme={theme} id="gh" title="Local gh CLI" text="Your own GitHub login on this machine." icon="Terminal" active={config.activeSource === "gh"} onPick={pick}>
-          <GhPanel theme={theme} />
-        </SourceChoice>
-        <SourceChoice theme={theme} id="app" title="GitHub Apps" text="Dedicated App installations, one per owner, each with its own rate limit." icon="KeyRound" active={config.activeSource === "app"} onPick={pick}>
-          <AppsPanel theme={theme} apps={apps} config={config} data={data} />
-        </SourceChoice>
+      <View style={{ gap: 8 }}>
+        <Muted theme={theme} size={13}>Pick the auth source agents use. The selected source is the active one.</Muted>
+        <View accessibilityRole="radiogroup" style={{ flexDirection: "column", gap: 8 }}>
+          {SOURCE_OPTIONS.map((o) => <SourceRow key={o.id} theme={theme} option={o} active={config.activeSource === o.id} onPick={pick} />)}
+        </View>
       </View>
+      <Card theme={theme}>
+        {config.activeSource === "gh" ? <GhPanel theme={theme} /> : <AppsPanel theme={theme} apps={apps} config={config} data={data} />}
+      </Card>
       <Card theme={theme}>
         <Toggle
           theme={theme}
