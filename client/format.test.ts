@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SOURCE_OPTIONS, appSummary, toggleOpen, countdown, percent, presetOf, splitList, summarize, toggleChecked, withAlpha } from "./format";
+import { SOURCE_OPTIONS, visibleSources, appSummary, toggleOpen, countdown, percent, presetOf, splitList, summarize, toggleChecked, withAlpha } from "./format";
 
 describe("format", () => {
   it("counts down", () => {
@@ -49,5 +49,13 @@ describe("source options", () => {
   it("toggles open entries", () => {
     expect(toggleOpen([], "a")).toEqual(["a"]);
     expect(toggleOpen(["a", "b"], "a")).toEqual(["b"]);
+  });
+  it("shows only the sources in use on the Overview", () => {
+    const all = [{ key: "gh", active: false }, { key: "app:a", active: true }, { key: "app:b", active: true }];
+    expect(visibleSources(all, false).map((s) => s.key)).toEqual(["app:a", "app:b"]);
+    expect(visibleSources(all, true)).toHaveLength(3);
+    const gh = [{ key: "gh", active: true }, { key: "app:a", active: false }];
+    expect(visibleSources(gh, false).map((s) => s.key)).toEqual(["gh"]);
+    expect(visibleSources(gh, true)).toHaveLength(2);
   });
 });

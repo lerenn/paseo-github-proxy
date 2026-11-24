@@ -55,7 +55,7 @@ export function GithubProxyScreen({ theme, layout }: PluginScreenProps) {
         </ScrollView>
       </View>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: pad, paddingBottom: pad * 2, maxWidth: 1100, width: "100%", alignSelf: "center" }}>
-        {tab === "overview" ? <OverviewTab theme={theme} data={overview.data} onClearCache={() => config.clearData.mutate("cache")} onOpenAuth={() => setTab("auth")} /> : null}
+        {tab === "overview" ? <OverviewTab theme={theme} data={overview.data} fallback={config.config?.fallbackOnRateLimit ?? false} onClearCache={() => config.clearData.mutate("cache")} onOpenAuth={() => setTab("auth")} /> : null}
         {tab === "auth" ? <AuthTab theme={theme} data={config} /> : null}
         {tab === "policy" ? <PolicyTab theme={theme} data={config} /> : null}
         {tab === "activity" ? <ActivityTab theme={theme} entries={activity.data?.entries} onClear={() => config.clearData.mutate("activity")} /> : null}

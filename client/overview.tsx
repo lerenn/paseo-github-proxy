@@ -1,7 +1,7 @@
 import { Icon } from "@getpaseo/plugin/client/ui";
 import { Text, View } from "react-native";
 import type { Overview, RateLimitView, SourceStatus } from "../shared/state";
-import { clock, countdown, percent } from "./format";
+import { clock, countdown, percent, visibleSources } from "./format";
 import { Banner, BannerText, Bar, Button, Card, Heading, Muted, Pill, Sparkline, Stat, useNow, type Theme, type Tone } from "./ui-kit";
 
 const sourceLabel = (s: SourceStatus): string => (s.source === "gh" ? "gh CLI" : `GitHub App${s.key === "app:" ? "" : ` "${s.label}"`}`);
@@ -54,7 +54,7 @@ function SourceCard({ theme, source, now }: { theme: Theme; source: SourceStatus
   );
 }
 
-export function OverviewTab({ theme, data, onClearCache, onOpenAuth }: { theme: Theme; data: Overview | undefined; onClearCache(): void; onOpenAuth(): void }) {
+export function OverviewTab({ theme, data, onClearCache, onOpenAuth, fallback }: { theme: Theme; data: Overview | undefined; fallback: boolean; onClearCache(): void; onOpenAuth(): void }) {
   const now = useNow();
   if (!data) return <Muted theme={theme}>Loading…</Muted>;
   const exhausted = data.sources.filter((s) => s.blockedUntil !== null);
@@ -81,8 +81,8 @@ export function OverviewTab({ theme, data, onClearCache, onOpenAuth }: { theme: 
         </Banner>
       ) : null}
 
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
-        {data.sources.map((s) => <SourceCard key={s.key} theme={theme} source={s} now={now} />)}
+      <View style={{ gap: 12 }}>
+        {visibleSources(data.sources, fallback).map((s) => <SourceCard key={s.key} theme={theme} source={s} now={now} />)}
       </View>
 
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>

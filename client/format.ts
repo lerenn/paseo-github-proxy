@@ -70,3 +70,11 @@ export function appSummary(app: { owners: string[]; appId: string; default: bool
 export function toggleOpen(open: readonly string[], id: string): string[] {
   return open.includes(id) ? open.filter((x) => x !== id) : [...open, id];
 }
+
+/**
+ * The rate-limit sources to show on the Overview: the active source (every App when it is "app"), plus the other
+ * source only when the rate-limit fallback is on, since that is the only way it can serve a call.
+ */
+export function visibleSources<T extends { active: boolean }>(sources: readonly T[], fallback: boolean): T[] {
+  return sources.filter((s) => s.active || fallback);
+}
