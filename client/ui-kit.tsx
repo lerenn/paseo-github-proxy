@@ -106,13 +106,13 @@ export function Toggle({ theme, value, onChange, label, hint, disabled }: { them
       accessibilityLabel={label}
       disabled={disabled}
       onPress={() => onChange(!value)}
-      style={{ flexDirection: "row", alignItems: "center", gap: 12, opacity: disabled ? 0.5 : 1 }}
+      style={{ flexDirection: "row", alignItems: "flex-start", gap: 12, opacity: disabled ? 0.5 : 1 }}
     >
-      <View style={{ width: 38, height: 22, borderRadius: 11, padding: 2, backgroundColor: value ? theme.colors.accent : theme.colors.surface2, borderWidth: 1, borderColor: value ? theme.colors.accent : theme.colors.border, justifyContent: "center" }}>
+      <View style={{ width: 38, height: 22, borderRadius: 11, padding: 2, backgroundColor: value ? theme.colors.accent : theme.colors.surface2, borderWidth: 1, borderColor: value ? theme.colors.accent : theme.colors.border, justifyContent: "center", marginTop: 1 }}>
         <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: value ? theme.colors.accentForeground : theme.colors.foregroundMuted, alignSelf: value ? "flex-end" : "flex-start" }} />
       </View>
-      <View style={{ flex: 1, gap: 2 }}>
-        <Text style={{ color: theme.colors.foreground, fontSize: 14, fontWeight: "500" }}>{label}</Text>
+      <View style={{ flex: 1, gap: 3 }}>
+        <Text style={{ color: theme.colors.foreground, fontSize: 14, fontWeight: "500", lineHeight: 22 }}>{label}</Text>
         {hint ? <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12, lineHeight: 17 }}>{hint}</Text> : null}
       </View>
     </Pressable>
@@ -152,8 +152,9 @@ export function Field({
     if (draft !== value) onCommit(draft);
   };
   return (
-    <View style={{ gap: 5, ...(width !== undefined ? { width } : { flex: 1, minWidth: 140 }) }}>
+    <View style={{ gap: 5, ...(width === undefined ? { flex: 1, minWidth: 140 } : hint ? { alignSelf: "stretch" } : { width }) }}>
       {label ? <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12, fontWeight: "600" }}>{label}</Text> : null}
+      <View style={width !== undefined && hint ? { width } : undefined}>
       <TextInput
         accessibilityLabel={label ?? placeholder}
         value={draft}
@@ -171,6 +172,7 @@ export function Field({
           paddingHorizontal: 11, paddingVertical: 9, fontSize: 13, fontFamily: mono ? "monospace" : undefined, minHeight: multiline ? 110 : undefined, textAlignVertical: multiline ? "top" : "center",
         }}
       />
+      </View>
       {hint ? <Text style={{ color: theme.colors.foregroundMuted, fontSize: 11, lineHeight: 16 }}>{hint}</Text> : null}
     </View>
   );
