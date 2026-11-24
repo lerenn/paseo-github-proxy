@@ -30,7 +30,7 @@ function LimitRow({ theme, limit, now }: { theme: Theme; limit: RateLimitView; n
 function SourceCard({ theme, source, now }: { theme: Theme; source: SourceStatus; now: number }) {
   const blocked = source.blockedUntil !== null;
   return (
-    <Card theme={theme} tone={blocked ? "bad" : undefined} style={{ flexGrow: 1, flexBasis: 280 }}>
+    <Card theme={theme} tone={blocked ? "bad" : undefined}>
       <Heading
         theme={theme}
         icon={SOURCE_ICON[source.source]}
