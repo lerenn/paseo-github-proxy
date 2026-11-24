@@ -6,10 +6,13 @@ import {
   clearRpc,
   configGetRpc,
   configSaveRpc,
+  discoverOwnersRpc,
+  discoverReposRpc,
   dryRunRpc,
   overviewRpc,
   sourceCheckRpc,
 } from "./shared/contracts";
+import { discoverOwners, discoverRepos } from "./server/discovery";
 import { createRuntime } from "./server/runtime";
 import { buildTools, SOFT_RULE_PROMPT } from "./server/tools";
 
@@ -61,6 +64,13 @@ export default function contribute(server: PluginServerContext) {
     if (what === "cache") rt.cache.clear();
     else rt.activity.clear();
     return { ok: true };
+  });
+  const lookup = (path: string, query?: Record<string, string | number>) => rt.proxy.lookup(path, query);
+  server.handle(discoverOwnersRpc, () => discoverOwners(lookup, rt.store.get().activeSource));
+  server.handle(discoverReposRpc, async () => {
+    const config = rt.store.get();
+    const { owners } = config.allowedOwners.includes("*") ? await discoverOwners(lookup, config.activeSource) : { owners: [] };
+    return discoverRepos(lookup, config, owners);
   });
   server.handle(dryRunRpc, ({ kind, method, path, query, repo }) =>
     rt.proxy.dryRun(kind === "graphql" ? { kind, query, repo } : { kind, method, path }),

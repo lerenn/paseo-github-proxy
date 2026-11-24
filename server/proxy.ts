@@ -111,6 +111,17 @@ export class GithubProxy {
     return this.judgeParts(repo, repo ? [repo.split("/")[0]!] : [], actions);
   }
 
+  /**
+   * A cached GET used by the settings UI (owner and repository pickers), not by agents: it is read-only, goes through the
+   * active source, cache and rate-limit tracking, and is not logged as agent activity. Callers apply the owner allowlist and policy to what they return.
+   */
+  async lookup(path: string, query: Record<string, string | number> = {}): Promise<unknown> {
+    const params = new URLSearchParams(Object.entries(query).map(([k, v]): [string, string] => [k, String(v)]));
+    const qs = params.toString();
+    const p: Prepared = { method: "GET", url: `${this.base}${path}${qs ? `?${qs}` : ""}`, classified: classifyRest("GET", path), resource: resourceOf(path), cacheable: true };
+    return (await this.fetchThrough(p)).data;
+  }
+
   // ---- internals -----------------------------------------------------------------------------
 
   private judge(classified: Classified): { allowed: boolean; message: string; rule: string | null } {

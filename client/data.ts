@@ -1,7 +1,7 @@
 import { useRpc } from "@getpaseo/plugin/client";
 import { useToast } from "@getpaseo/plugin/client/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { activityRpc, appCredentialsClearRpc, appCredentialsSaveRpc, clearRpc, configGetRpc, configSaveRpc, overviewRpc } from "../shared/contracts";
+import { discoverOwnersRpc, discoverReposRpc, activityRpc, appCredentialsClearRpc, appCredentialsSaveRpc, clearRpc, configGetRpc, configSaveRpc, overviewRpc } from "../shared/contracts";
 import type { Config } from "../shared/config";
 
 const POLL_MS = 2000;
@@ -67,4 +67,18 @@ export function useConfigData() {
     onSuccess: () => void client.invalidateQueries({ queryKey: ["github-proxy"] }),
   });
   return { config: query.data?.config ?? null, app: query.data?.app ?? null, loading: query.isLoading, error: query.error as Error | null, change, appSave, appClear, clearData };
+}
+
+/** Owners the active source can reach (gh user and orgs, or the App installation account). Never throws: a failure becomes `error`. */
+export function useOwnerChoices(source: string) {
+  const owners = useRpc(discoverOwnersRpc);
+  const q = useQuery({ queryKey: ["github-proxy", "owners", source], queryFn: () => owners({}), staleTime: 60_000, retry: false });
+  return { owners: q.data?.owners ?? [], error: q.data?.error || (q.error ? (q.error as Error).message : ""), loading: q.isLoading };
+}
+
+/** Repositories of the allowed owners that the policy lets agents read. Refetched when the owners or source change. */
+export function useRepoChoices(key: string) {
+  const repos = useRpc(discoverReposRpc);
+  const q = useQuery({ queryKey: ["github-proxy", "repos", key], queryFn: () => repos({}), staleTime: 60_000, retry: false });
+  return { repos: q.data?.repos ?? [], errors: q.data?.errors ?? (q.error ? [(q.error as Error).message] : []), loading: q.isLoading };
 }

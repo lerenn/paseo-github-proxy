@@ -41,7 +41,7 @@ Pick **one active source**. Optionally turn on **Fall back to the other source o
 
 ### 2. Allow owners (Auth tab)
 
-Add the GitHub users and organizations agents may act on, for example `acme, lerenn`. This is a safety net on top of the policy. The default is `*`, which allows every owner; replace it with specific owners to restrict agents. **If you clear the list, every call is refused.**
+Open the **Allowed owners** dropdown and check the GitHub users and organizations agents may act on. The list comes from the active source (the gh user and their organizations, or the account the App is installed on); type a name to add one that is not listed. Checking **All owners (`*`)** clears the others. This is a safety net on top of the policy. The default is `*`, which allows every owner; replace it with specific owners to restrict agents. **If you clear the list, every call is refused.**
 
 ### 3. Set the policy (Policy tab)
 
@@ -53,7 +53,7 @@ Presets:
 | **PR workflow** | the above + comment, review, create issue, create PR, update PR |
 | **Full** | everything |
 
-Then adjust the default permission per action, and add rules. A rule has an effect (allow or deny), repository patterns (`acme/*`, `acme/web-*`, `*`), a list of actions and an optional reason shown to the agent. A matching **deny** rule always wins, then an **allow** rule, then the defaults.
+Then adjust the default permissions in one checklist dropdown (checked means allowed), and add rules. A rule has an effect (allow or deny), repositories, actions (both checkable dropdowns) and an optional reason shown to the agent. The repository dropdown lists the repositories of the allowed owners that the policy lets agents read (first 100 per owner, cached; if listing fails you still can type); type a pattern such as `acme/*` or `acme/web-*` for the rest. A matching **deny** rule always wins, then an **allow** rule, then the defaults.
 
 Examples:
 

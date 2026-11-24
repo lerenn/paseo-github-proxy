@@ -6,9 +6,9 @@ import { Pressable, Text, View } from "react-native";
 import { ACTIONS, ACTION_INFO, PRESET_INFO, PRESETS, type Action, type Preset } from "../shared/actions";
 import { presetPolicy, type Config, type Policy, type Rule } from "../shared/config";
 import { dryRunRpc } from "../shared/contracts";
-import { presetOf, splitList, withAlpha } from "./format";
-import type { useConfigData } from "./data";
-import { Banner, BannerText, Button, Card, Field, Heading, Muted, Pill, Segmented, Toggle, toneColor, type Theme, type Tone } from "./ui-kit";
+import { presetOf, summarize, withAlpha } from "./format";
+import { useRepoChoices, type useConfigData } from "./data";
+import { Banner, BannerText, Button, Card, Field, Heading, Muted, MultiSelect, Pill, Segmented, Toggle, toneColor, type Theme, type Tone } from "./ui-kit";
 
 type ConfigData = ReturnType<typeof useConfigData>;
 const RISK_TONE: Record<string, Tone> = { safe: "good", low: "neutral", medium: "warn", high: "bad" };
@@ -44,27 +44,23 @@ function Presets({ theme, config, data }: { theme: Theme; config: Config; data: 
 }
 
 function Defaults({ theme, config, data }: { theme: Theme; config: Config; data: ConfigData }) {
-  const toggle = (a: Action, on: boolean) =>
-    data.change((c) => withPolicy(c, { ...c.policy, defaultAllow: on ? [...new Set([...c.policy.defaultAllow, a])] : c.policy.defaultAllow.filter((x) => x !== a) }));
+  const set = (allowed: string[]) => data.change((c) => withPolicy(c, { ...c.policy, defaultAllow: ACTIONS.filter((a) => allowed.includes(a)) }));
   return (
     <Card theme={theme}>
-      <Heading theme={theme} icon="ListChecks" title="Default permissions" hint="What agents may do on any repository (of an allowed owner) that no rule below covers." />
-      <View style={{ gap: 12 }}>
-        {ACTIONS.map((a) => (
-          <View key={a} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-            <View style={{ flex: 1 }}>
-              <Toggle theme={theme} value={config.policy.defaultAllow.includes(a)} onChange={(v) => toggle(a, v)} label={ACTION_INFO[a].label} hint={ACTION_INFO[a].hint} />
-            </View>
-            <Pill theme={theme} label={ACTION_INFO[a].risk} tone={RISK_TONE[ACTION_INFO[a].risk]!} />
-          </View>
-        ))}
-      </View>
+      <Heading theme={theme} icon="ListChecks" title="Default permissions" hint="What agents may do on any repository (of an allowed owner) that no rule below covers. Checked means allowed." />
+      <MultiSelect
+        theme={theme}
+        label="Allowed by default"
+        options={ACTIONS.map((a) => ({ value: a, label: ACTION_INFO[a].label, hint: `${ACTION_INFO[a].hint} (${ACTION_INFO[a].risk} risk)` }))}
+        selected={[...config.policy.defaultAllow]}
+        onChange={set}
+        summary={(s) => (s.length === 0 ? "Nothing allowed" : `${s.length} of ${ACTIONS.length} allowed`)}
+      />
     </Card>
   );
 }
 
-function RuleEditor({ theme, rule, index, onChange, onDelete }: { theme: Theme; rule: Rule; index: number; onChange(next: Rule): void; onDelete(): void }) {
-  const all = rule.actions.includes("*");
+function RuleEditor({ theme, rule, index, onChange, onDelete, repoChoices, repoLoading, repoNote }: { theme: Theme; rule: Rule; index: number; onChange(next: Rule): void; onDelete(): void; repoChoices: string[]; repoLoading: boolean; repoNote: string }) {
   const color = toneColor(theme, rule.effect === "deny" ? "bad" : "good");
   return (
     <View style={{ gap: 10, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: withAlpha(color, 0.5), backgroundColor: withAlpha(color, 0.06) }}>
@@ -74,38 +70,44 @@ function RuleEditor({ theme, rule, index, onChange, onDelete }: { theme: Theme; 
         <View style={{ flex: 1 }} />
         <Button theme={theme} kind="ghost" icon="Trash2" label="Delete" onPress={onDelete} />
       </View>
-      <Field theme={theme} label="Repositories" value={rule.repos.join(", ")} onCommit={(t) => onChange({ ...rule, repos: splitList(t).length ? splitList(t) : ["*"] })} placeholder="acme/*, lerenn/paseo-*, *" hint="owner/name patterns, comma separated. * matches any run of characters inside one part." />
-      <View style={{ gap: 6 }}>
-        <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12, fontWeight: "600" }}>Actions</Text>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-          <Chip theme={theme} label="All actions" active={all} onPress={() => onChange({ ...rule, actions: all ? ["read"] : ["*"] })} />
-          {ACTIONS.map((a) => (
-            <Chip key={a} theme={theme} label={ACTION_INFO[a].label} active={!all && rule.actions.includes(a)} disabled={all} onPress={() => onChange({ ...rule, actions: rule.actions.includes(a) ? rule.actions.filter((x) => x !== a) : [...rule.actions, a] })} />
-          ))}
-        </View>
-      </View>
+      <MultiSelect
+        theme={theme}
+        label="Repositories"
+        options={[{ value: "*", label: "Every repository (*)" }, ...repoChoices.map((r) => ({ value: r, label: r }))]}
+        selected={rule.repos}
+        onChange={(repos) => onChange({ ...rule, repos: repos.length ? repos : ["*"] })}
+        exclusive="*"
+        allowCustom
+        customPlaceholder="Type a pattern such as acme/* or acme/web-*"
+        summary={(s) => summarize(s, { none: "Every repository (*)", exclusive: "*", all: "Every repository (*)" })}
+        loading={repoLoading}
+        note={repoNote}
+      />
+      <MultiSelect
+        theme={theme}
+        label="Actions"
+        options={[{ value: "*", label: "All actions (*)" }, ...ACTIONS.map((a) => ({ value: a, label: ACTION_INFO[a].label, hint: ACTION_INFO[a].hint }))]}
+        selected={rule.actions}
+        onChange={(actions) => onChange({ ...rule, actions: (actions.length ? actions : ["read"]) as Rule["actions"] })}
+        exclusive="*"
+        summary={(s) => summarize(s.map((a) => (a === "*" || !(a in ACTION_INFO) ? a : ACTION_INFO[a as Action].label)), { none: "No action", exclusive: "*", all: "All actions (*)" })}
+      />
       <Field theme={theme} label="Reason (shown to the agent when it denies)" value={rule.reason} onCommit={(reason) => onChange({ ...rule, reason })} placeholder="e.g. prod is merged by humans only" />
     </View>
   );
 }
 
-function Chip({ theme, label, active, onPress, disabled }: { theme: Theme; label: string; active: boolean; onPress(): void; disabled?: boolean }) {
-  return (
-    <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: active, disabled: !!disabled }} accessibilityLabel={label} disabled={disabled} onPress={onPress} style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, borderWidth: 1, borderColor: active ? theme.colors.accent : theme.colors.border, backgroundColor: active ? withAlpha(theme.colors.accent, 0.16) : "transparent", opacity: disabled ? 0.4 : 1 }}>
-      <Text style={{ color: active ? theme.colors.foreground : theme.colors.foregroundMuted, fontSize: 12, fontWeight: "600" }}>{label}</Text>
-    </Pressable>
-  );
-}
-
 function Rules({ theme, config, data }: { theme: Theme; config: Config; data: ConfigData }) {
   const setRules = (rules: Rule[]) => data.change((c) => ({ ...c, policy: { ...c.policy, rules } }));
+  const found = useRepoChoices(`${config.activeSource}|${config.allowedOwners.join(",")}`);
+  const repoNote = found.errors.length ? `Some repositories could not be listed (${found.errors[0]}). You can still type a pattern.` : "Repositories of the allowed owners that agents may read. Type a pattern such as owner/* for others.";
   const add = (effect: "allow" | "deny") => setRules([...config.policy.rules, { id: `rule-${Date.now().toString(36)}`, effect, repos: ["*"], actions: effect === "deny" ? ["merge", "delete_branch", "force_push"] : ["comment"], reason: "" }]);
   return (
     <Card theme={theme}>
       <Heading theme={theme} icon="ListFilter" title="Rules per repository" hint="A deny rule always wins, then an allow rule, then the default permissions." />
       {config.policy.rules.length === 0 ? <Muted theme={theme}>No rules: the default permissions apply everywhere.</Muted> : null}
       {config.policy.rules.map((rule, i) => (
-        <RuleEditor key={rule.id} theme={theme} rule={rule} index={i} onChange={(next) => setRules(config.policy.rules.map((r, j) => (j === i ? next : r)))} onDelete={() => setRules(config.policy.rules.filter((_, j) => j !== i))} />
+        <RuleEditor key={rule.id} theme={theme} repoChoices={found.repos} repoLoading={found.loading} repoNote={repoNote} rule={rule} index={i} onChange={(next) => setRules(config.policy.rules.map((r, j) => (j === i ? next : r)))} onDelete={() => setRules(config.policy.rules.filter((_, j) => j !== i))} />
       ))}
       <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
         <Button theme={theme} icon="Plus" label="Add allow rule" onPress={() => add("allow")} />

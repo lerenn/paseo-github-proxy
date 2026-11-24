@@ -48,4 +48,16 @@ export const dryRunRpc = defineRpc({
   output: z.object({ allowed: z.boolean(), message: z.string(), repo: z.string(), actions: z.array(actionSchema), rule: z.string().nullable() }),
 });
 
+export const discoverOwnersRpc = defineRpc({
+  name: "github-proxy.discover.owners",
+  input: z.object({}),
+  output: z.object({ owners: z.array(z.string()), error: z.string() }),
+});
+
+export const discoverReposRpc = defineRpc({
+  name: "github-proxy.discover.repos",
+  input: z.object({}),
+  output: z.object({ repos: z.array(z.string()), errors: z.array(z.string()) }),
+});
+
 export const policyPreviewSchema = policySchema;
