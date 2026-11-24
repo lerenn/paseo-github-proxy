@@ -70,6 +70,20 @@ describe("ownerAllowed", () => {
   });
 });
 
+describe("default policy", () => {
+  it("Full is exactly the whole catalog and a fresh config allows every kind of write", async () => {
+    const { ACTIONS, PRESET_INFO } = await import("../shared/actions");
+    const { defaultConfig } = await import("../shared/config");
+    expect([...PRESET_INFO.full.allow]).toEqual([...ACTIONS]);
+    expect(presetPolicy("full").actionsVersion).toBe((await import("../shared/actions")).CATALOG_VERSION);
+    const { policy } = defaultConfig();
+    expect(policy.preset).toBe("full");
+    for (const a of ["create_branch", "write_file", "merge", "delete_branch", "force_push", "generic_api_write", "generic_api_read", "manage_release"] as const) expect(evaluateAction(policy, "acme/web", a).allowed).toBe(true);
+    expect(evaluateAction(presetPolicy("read_only"), "acme/web", "write_file").allowed).toBe(false);
+    expect(evaluateAction(presetPolicy("read_only"), "acme/web", "generic_api_write").allowed).toBe(false);
+  });
+});
+
 describe("presets", () => {
   it("read-only grants only reads; the PR workflow never grants a high or generic write action", async () => {
     const { ACTION_INFO, PRESET_INFO } = await import("../shared/actions");

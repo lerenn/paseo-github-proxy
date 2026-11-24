@@ -57,14 +57,14 @@
 <p>In <strong>Auth → Allowed owners</strong>, open the dropdown and check the GitHub users and organizations agents may act on. The list comes from the active source; type a name to add one that is not listed. The default <code>*</code> allows every owner; replace it to restrict agents. <strong>If you clear the list, every call is refused.</strong></p>
 
 <h2 id="policy">4. Set the policy</h2>
-<p>The <strong>Policy</strong> tab starts on <strong>Read-only</strong>. Pick a preset, adjust the default permissions in one checklist dropdown, and add rules. A rule picks its repositories (listed from the allowed owners, or typed as a pattern such as <code>acme/*</code>) and its actions from checkable dropdowns:</p>
+<p>The <strong>Policy</strong> tab starts on <strong>Full</strong> (every action allowed). Pick <strong>Read-only</strong> or <strong>PR workflow</strong> to restrict agents, adjust the default permissions in one checklist dropdown, and add rules. A rule picks its repositories (listed from the allowed owners, or typed as a pattern such as <code>acme/*</code>) and its actions from checkable dropdowns:</p>
 <pre><code>Preset: PR workflow
 Rule 1  deny   acme/prod     merge, delete_branch, force_push   "humans merge prod"
 Rule 2  allow  lerenn/*      merge</code></pre>
 <p>Use <strong>Test this call</strong> to see what the policy says about a REST path or GraphQL query without sending anything.</p>
 
 <h2 id="try">5. Try it</h2>
-<p>Ask any agent to list the open pull requests of a repository. In the <strong>Activity</strong> tab you will see the call as <em>Allowed</em>; ask again within 30 seconds and it shows as <em>Cached</em>. Ask it to merge one under Read-only and it shows as <em>Denied</em> with the reason the agent received.</p>
+<p>Ask any agent to list the open pull requests of a repository. In the <strong>Activity</strong> tab you will see the call as <em>Allowed</em>; ask again within 30 seconds and it shows as <em>Cached</em>. Ask it to merge one after you pick Read-only and it shows as <em>Denied</em> with the reason the agent received.</p>
 
 <h2 id="soft">Optional: steer agents away from gh and curl</h2>
 <p>In <strong>Policy → Behaviour</strong>, turn on <strong>Forbid direct use of gh, curl and raw GitHub</strong>. An instruction is added to every agent's system prompt and to each tool description telling it to use the <code>github_*</code> tools. It is a soft rule, not a sandbox, and wins over a project file that allows gh, unless you ask for gh. On Paseo 0.16 it reaches agents created after you turn it on; from 0.17 also any session opened afterwards.</p>

@@ -22,7 +22,7 @@ export function withPolicy(config: Config, policy: Policy): Config {
 function Presets({ theme, config, data }: { theme: Theme; config: Config; data: ConfigData }) {
   return (
     <Card theme={theme}>
-      <Heading theme={theme} icon="ShieldHalf" title="Preset" hint="The default for repositories no rule covers. Read-only is the default: agents can look, not touch." />
+      <Heading theme={theme} icon="ShieldHalf" title="Preset" hint="The default for repositories no rule covers. Full is the default on a fresh install: every action is allowed. Pick Read-only or PR workflow to restrict agents, then add deny rules." />
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
         {PRESETS.map((p) => {
           const active = config.policy.preset === p;
@@ -31,7 +31,7 @@ function Presets({ theme, config, data }: { theme: Theme; config: Config; data: 
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                 <Icon name={p === "read_only" ? "Eye" : p === "pr_workflow" ? "GitPullRequest" : "ShieldOff"} size={15} color={active ? theme.colors.accent : theme.colors.foregroundMuted} />
                 <Text style={{ color: theme.colors.foreground, fontSize: 14, fontWeight: "600", flex: 1 }}>{PRESET_INFO[p].label}</Text>
-                {p === "read_only" ? <Pill theme={theme} label="Default" /> : null}
+                {p === "full" ? <Pill theme={theme} label="Default" /> : null}
               </View>
               <Muted theme={theme}>{PRESET_INFO[p].hint}</Muted>
             </Pressable>

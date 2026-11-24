@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { ACTIONS } from "../shared/actions";
 import { appEntrySchema, appName, appOwners, presetPolicy, resolveApp } from "../shared/config";
 import { ConfigStore } from "./store";
 
@@ -16,11 +17,11 @@ const tmp = () => {
 afterEach(() => dirs.splice(0).forEach((d) => rmSync(d, { recursive: true, force: true })));
 
 describe("ConfigStore", () => {
-  it("defaults to read-only with every owner allowed, gh as source and a 30 s TTL", () => {
+  it("defaults to the Full policy with every owner allowed, gh as source and a 30 s TTL", () => {
     const c = new ConfigStore(tmp()).get();
     expect(c).toMatchObject({ activeSource: "gh", fallbackOnRateLimit: false, allowedOwners: ["*"], cacheTtlSeconds: 30, forbidRawGithub: false, blockRawGithub: false });
-    expect(c.policy.preset).toBe("read_only");
-    expect(c.policy.defaultAllow).toEqual(["read", "generic_api_read"]);
+    expect(c.policy.preset).toBe("full");
+    expect(c.policy.defaultAllow).toEqual([...ACTIONS]);
   });
 
   it("persists config, normalizing owners", () => {
@@ -114,7 +115,7 @@ describe("ConfigStore", () => {
     const dir = tmp();
     new ConfigStore(dir).set({ ...new ConfigStore(dir).get() });
     require("node:fs").writeFileSync(path.join(dir, "config.json"), "{nope");
-    expect(new ConfigStore(dir).get().policy.preset).toBe("read_only");
+    expect(new ConfigStore(dir).get().policy.preset).toBe("full");
   });
   it("claims the organization automatically, compares owners case-insensitively and never duplicates it", () => {
     const s = new ConfigStore(tmp());

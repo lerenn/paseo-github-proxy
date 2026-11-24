@@ -8,7 +8,7 @@ import { RateLimitTracker } from "./ratelimit";
 import { buildTools, repoFromRemote, SOFT_RULE_PROMPT } from "./tools";
 
 function make(config: Partial<Config>, replies: { status: number; body?: unknown; headers?: Record<string, string> }[], softRule = false) {
-  const cfg: Config = { ...defaultConfig(), allowedOwners: ["acme"], ...config };
+  const cfg: Config = { ...defaultConfig(), policy: presetPolicy("read_only"), allowedOwners: ["acme"], ...config };
   const queue = [...replies];
   const calls: { url: string; method: string; body?: string }[] = [];
   const fetchFn: FetchFn = vi.fn(async (url, init) => {

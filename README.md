@@ -3,7 +3,7 @@
 A [Paseo](https://paseo.sh) plugin that gives every agent policy-controlled, cached and rate-limit-aware GitHub tools, instead of each agent running `gh` or `curl` on its own.
 
 - **One front door.** The `github_*` tools are added to every agent automatically.
-- **Read-only by default.** You enable writes, per action and per repository.
+- **Full by default, restrictable.** A fresh install allows every action. Switch to Read-only or PR workflow in one tap in the Policy tab, and add deny rules per action and per repository.
 - **Fewer API calls.** A shared in-memory and on-disk cache with ETag revalidation, so many agents asking the same thing cost one request.
 - **Rate limits handled.** Live remaining/limit per credential source, a "retry at HH:MM" error to the agent when exhausted, one limit per GitHub App, optional fallback to the other credential source.
 - **Clear denials.** The agent is told which rule denied a call and why, so it stops retrying.
@@ -57,9 +57,11 @@ Presets:
 
 | Preset | Allows |
 | --- | --- |
-| **Read-only** (default) | read, generic API read |
+| **Read-only** | read, generic API read |
 | **PR workflow** | the above + comment, review, create issue, create PR, update PR, create branch, manage labels, manage notifications |
-| **Full** | everything |
+| **Full** (default on a fresh install) | everything: every action of the catalog, including generic API read and write |
+
+A saved policy is never widened by an update; only a fresh install (no saved policy) starts on Full. To go back to the safe default, open the Policy tab and pick **Read-only**.
 
 Then adjust the default permissions in one checklist dropdown (checked means allowed), and add rules. A rule has an effect (allow or deny), repositories, actions (both checkable dropdowns) and an optional reason shown to the agent. The repository dropdown lists the repositories of the allowed owners that the policy lets agents read (first 100 per owner, cached; if listing fails you still can type); type a pattern such as `acme/*` or `acme/web-*` for the rest. A matching **deny** rule always wins, then an **allow** rule, then the defaults.
 
@@ -105,7 +107,7 @@ What the listener accepts: only `POST /webhook` (bodies up to 1 MiB) with a vali
 
 Filters: `repo` and `events` always; `conclusion`, `branch`, `tag`, `workflow` and `mentions` must all match when given; `pr` and `sha` are an either-or (an event for that PR or that commit), and `sha` applies to `check_run`, `check_suite`, `workflow_run` and `status` events too. `branch` and `tag` accept a trailing `*` as a prefix (`v*`); a `branch` filter never matches a tag push and a `tag` filter never matches a branch push, but a workflow run only names its ref, so there either one matches by name. `workflow` is the workflow, check run or status context name (case-insensitive, exact). `mentions` is a list of strings (`@codex`): the comment or review text must contain one, case-insensitively, and it is matched on the webhook payload only, with no GitHub call; the text is never put in the prompt. Typical waits: main CI by commit (`checks_completed`, `sha`), main CI by branch (`branch: main`, `workflow`), a tag build (`checks_completed`, `tag`), a merge queue (`merge_queue_destroyed`, `pr`, `conclusion: ["merged"]`).
 
-One-shot by default, `persistent` keeps firing. It expires after 6 hours by default; `ttl_hours` (for example 24 for a CI wait) sets it up to 168 hours (7 days); at most 20 per agent. Subscriptions are kept in `subscriptions.json`, tied to the agent, and listed (with Unsubscribe) in the Activity tab. When an event matches, the agent gets a short prompt through the Paseo SDK (`paseo.agents.ref(id).send(...)`, steering a running turn rather than interrupting it) with the event, repository, PR, branch or tag and a hint to read details with the `github_*` tools. The only GitHub text in it is a title and a ref name, each cut short, on one line and quoted; comment and review bodies are never sent. Wake-ups are limited to 6 per agent per minute, and the subscriptions of an archived or missing agent are dropped. The `subscribe_events` action is in the PR workflow and Full presets and denied in the read-only default (it changes nothing on GitHub, but it makes the plugin prompt the agent; allow it with a rule if read-only agents need it). Note that a pull request has one `checks_completed` event per finished check suite, so use a `conclusion` filter or re-check with `github_checks` after the wake-up.
+One-shot by default, `persistent` keeps firing. It expires after 6 hours by default; `ttl_hours` (for example 24 for a CI wait) sets it up to 168 hours (7 days); at most 20 per agent. Subscriptions are kept in `subscriptions.json`, tied to the agent, and listed (with Unsubscribe) in the Activity tab. When an event matches, the agent gets a short prompt through the Paseo SDK (`paseo.agents.ref(id).send(...)`, steering a running turn rather than interrupting it) with the event, repository, PR, branch or tag and a hint to read details with the `github_*` tools. The only GitHub text in it is a title and a ref name, each cut short, on one line and quoted; comment and review bodies are never sent. Wake-ups are limited to 6 per agent per minute, and the subscriptions of an archived or missing agent are dropped. The `subscribe_events` action is in the PR workflow and Full presets and denied in the Read-only preset (it changes nothing on GitHub, but it makes the plugin prompt the agent; allow it with a rule if read-only agents need it). Note that a pull request has one `checks_completed` event per finished check suite, so use a `conclusion` filter or re-check with `github_checks` after the wake-up.
 
 ## Tools
 

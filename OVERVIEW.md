@@ -14,7 +14,7 @@ Open GitHub Proxy from the sidebar.
 
 - Auth: pick the local `gh` CLI (it must be logged in on the daemon machine) or one or several GitHub Apps (the organization or user it is installed on, App ID, installation ID, private key and optional extra owners). Each App has its own rate limit, shown in Overview. The private keys are stored in a file on the daemon machine that only its user can read, and is never sent back to the app. An option falls back to the other source when the active one is rate limited.
 - Allowed owners: check the GitHub users and organizations agents may reach in a dropdown filled from the active source (every App is asked). The default is `*` (every owner); replace it to restrict agents. An empty list refuses every call.
-- Policy: starts read-only. Switch to the PR workflow or full preset, or check individual actions in a dropdown, and add allow or deny rules per repository pattern. Test connection on each GitHub App checks the key, App ID, installation and token step by step and explains any failure. A test box shows what the policy would say about a call without sending anything.
+- Policy: a fresh install starts on the Full preset (every action allowed). Switch to Read-only or the PR workflow preset in one tap, or check individual actions in a dropdown, and add allow or deny rules per repository pattern. Test connection on each GitHub App checks the key, App ID, installation and token step by step and explains any failure. A test box shows what the policy would say about a call without sending anything.
 
 An optional setting adds an instruction to every agent's system prompt and tool descriptions to use these tools instead of `gh` or `curl`. It is a soft rule: an agent with a shell can still run `gh`.
 
@@ -22,7 +22,7 @@ A second, optional setting (the hard rule) denies permission requests for shell 
 
 ## Webhooks and wake-ups
 
-Optional and off by default. Turn on the webhook listener in Auth, give each GitHub App a generated webhook secret, and point GitHub at it through a public URL that you provide (a tunnel or reverse proxy such as cloudflared). Subscribe the App to the check_run, check_suite, issue_comment, merge_group, pull_request, pull_request_review, pull_request_review_comment, push, release, status and workflow_run events. Verified events refresh the cache at once, and agents can ask to be woken when checks finish (on a pull request, a commit, a branch or a tag), a review or comment arrives (optionally mentioning a handle), a pull request or merge queue group is merged or closed, a branch or tag is pushed or a release is published (`github_subscribe`, policy action Subscribe to events, off in the read-only preset).
+Optional and off by default. Turn on the webhook listener in Auth, give each GitHub App a generated webhook secret, and point GitHub at it through a public URL that you provide (a tunnel or reverse proxy such as cloudflared). Subscribe the App to the check_run, check_suite, issue_comment, merge_group, pull_request, pull_request_review, pull_request_review_comment, push, release, status and workflow_run events. Verified events refresh the cache at once, and agents can ask to be woken when checks finish (on a pull request, a commit, a branch or a tag), a review or comment arrives (optionally mentioning a handle), a pull request or merge queue group is merged or closed, a branch or tag is pushed or a release is published (`github_subscribe`, policy action Subscribe to events, off in the Read-only preset).
 
 ## Good to know
 

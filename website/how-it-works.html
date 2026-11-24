@@ -48,7 +48,7 @@
 <p>The plugin tracks <code>x-ratelimit-*</code> per credential (the gh CLI and each GitHub App) and per resource (<code>core</code>, <code>graphql</code>, <code>search</code>). A credential is blocked until its reset (the other Apps keep working) when a response says the limit is exhausted, carries <code>retry-after</code>, or reports a secondary limit. With nothing left to try, the agent gets a cached answer marked as stale when one exists, and otherwise an error such as <em>Retry at 14:07 (in about 12 min)</em>. The Overview tab shows the remaining count, a live countdown, and a warning when a limit is nearly used up.</p>
 
 <h2 id="policy">Policy</h2>
-<p>A policy is a default list of allowed actions (from a preset, read-only by default) plus ordered rules. See the <a href="reference.html#policy">reference</a> for the actions and how generic calls are classified. The generic <code>github_api</code> tool can never bypass a rule: a merge through it needs both <code>merge</code> and <code>generic_api_write</code>.</p>
+<p>A policy is a default list of allowed actions (from a preset, Full on a fresh install) plus ordered rules. See the <a href="reference.html#policy">reference</a> for the actions and how generic calls are classified. The generic <code>github_api</code> tool can never bypass a rule: a merge through it needs both <code>merge</code> and <code>generic_api_write</code>.</p>
 
 <h2 id="storage">What is stored, and where</h2>
 <table>
