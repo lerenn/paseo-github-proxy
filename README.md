@@ -13,7 +13,7 @@ The logic is a TypeScript port of an internal Go service (GitHub App JWT and ins
 
 ## Install
 
-Requires Paseo 0.17.0 or later.
+Requires Paseo 0.16.2 or later.
 
 ```bash
 paseo plugin install github:lerenn/paseo-github-proxy
@@ -63,7 +63,7 @@ Examples:
 
 Actions: `read`, `comment`, `review`, `create_issue`, `create_pr`, `update_pr`, `merge`, `delete_branch`, `force_push`, `generic_api_read`, `generic_api_write`. The generic `github_api` tool is classified from the request: a `PUT .../pulls/N/merge` needs `merge` **and** `generic_api_write`, so the generic tool never bypasses a rule on a specific action. The **Test this call** box shows the verdict for any REST path or GraphQL document without sending it.
 
-The same tab holds the **cache TTL** (30 s by default) and the **Forbid direct use of gh/curl/raw GitHub** checkbox, which adds an instruction to every agent's system prompt and tool descriptions to use the `github_*` tools. It is a soft rule, not a sandbox.
+The same tab holds the **cache TTL** (30 s by default) and the **Forbid direct use of gh/curl/raw GitHub** checkbox, which adds an instruction to every agent's system prompt and tool descriptions to use the `github_*` tools. It is a soft rule, not a sandbox. The instruction says the `github_*` tools win over a project AGENTS.md that allows `gh`, unless you explicitly ask for `gh`. On Paseo 0.16 it is saved in the system prompt when an agent is created, so only agents created after you turn it on get it; from 0.17 it is also added each time a session opens.
 
 ## Tools
 

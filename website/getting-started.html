@@ -24,7 +24,7 @@
 <h1>Getting started</h1>
 <p class="lead">Install the plugin, connect GitHub, allow an owner. Agents can read right away; you enable writes when you want them.</p>
 <ul>
-<li>Paseo 0.17 or later (the plugin declares <code>&gt;=0.17.0</code>).</li>
+<li>Paseo 0.16.2 or later (the plugin declares <code>&gt;=0.16.2</code>).</li>
 <li>Plugins enabled on the daemon: Settings → Plugins → Enable plugins, or <code>pluginsEnabled: true</code> in the daemon's <code>config.json</code>.</li>
 <li>For the <code>gh</code> source: the GitHub CLI installed and logged in on the daemon machine. For the App source: a GitHub App installed on your account or organization.</li>
 </ul>
@@ -64,7 +64,7 @@ Rule 2  allow  lerenn/*      merge</code></pre>
 <p>Ask any agent to list the open pull requests of a repository. In the <strong>Activity</strong> tab you will see the call as <em>Allowed</em>; ask again within 30 seconds and it shows as <em>Cached</em>. Ask it to merge one under Read-only and it shows as <em>Denied</em> with the reason the agent received.</p>
 
 <h2 id="soft">Optional: steer agents away from gh and curl</h2>
-<p>In <strong>Policy → Behaviour</strong>, turn on <strong>Forbid direct use of gh, curl and raw GitHub</strong>. An instruction is added to every agent's system prompt and to each tool description telling it to use the <code>github_*</code> tools. It is a soft rule, not a sandbox, and applies to sessions opened after you change it.</p>
+<p>In <strong>Policy → Behaviour</strong>, turn on <strong>Forbid direct use of gh, curl and raw GitHub</strong>. An instruction is added to every agent's system prompt and to each tool description telling it to use the <code>github_*</code> tools. It is a soft rule, not a sandbox, and wins over a project file that allows gh, unless you ask for gh. On Paseo 0.16 it reaches agents created after you turn it on; from 0.17 also any session opened afterwards.</p>
 
 </main>
 <footer class="site"><div class="inner">Paseo GitHub Proxy is a plugin for <a href="https://paseo.sh">Paseo</a>. Source on <a href="https://github.com/lerenn/paseo-github-proxy">GitHub</a>.</div></footer>

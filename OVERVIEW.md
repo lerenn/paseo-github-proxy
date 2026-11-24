@@ -20,7 +20,7 @@ An optional setting adds an instruction to every agent's system prompt and tool 
 
 ## Good to know
 
-- Needs Paseo 0.17.0 or later.
+- Needs Paseo 0.16.2 or later.
 - The activity log and counters are kept in memory and reset when the plugin restarts. Settings and the cache persist.
 - GraphQL calls are checked against the repository you pass and any `owner:` values in the query. Queries by node ID cannot be scoped to an owner, so they are refused unless every owner is allowed.
-- Changes to the soft rule apply to sessions opened after the change.
+- The soft rule reaches an agent in its system prompt when the agent is created (on Paseo 0.17 and later also when a session opens), so agents created before you turned it on do not get it on Paseo 0.16. It tells agents the github_* tools take precedence over a project file that allows gh, unless you ask for gh.

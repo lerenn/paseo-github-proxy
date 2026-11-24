@@ -103,5 +103,7 @@ describe("tools", () => {
     expect(off.every((t) => !/instead of the gh CLI/.test(t.description))).toBe(true);
     expect(on.every((t) => /instead of the gh CLI or curl/.test(t.description))).toBe(true);
     expect(SOFT_RULE_PROMPT).toMatch(/do not use the gh CLI, curl/i);
+    expect(SOFT_RULE_PROMPT).toMatch(/precedence over any project instruction/);
+    expect(SOFT_RULE_PROMPT).toMatch(/unless|only if the user explicitly asks/);
   });
 });

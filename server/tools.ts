@@ -5,8 +5,18 @@ import { ACTIONS, ACTION_INFO, type Action } from "../shared/actions";
 import { ProxyError, type GithubProxy, type ProxyResponse } from "./proxy";
 
 export const SOFT_RULE_PROMPT =
-  "GitHub access: do not use the gh CLI, curl, wget or any raw HTTP call to reach api.github.com or other GitHub APIs. Use the github_* tools instead: they apply the user's access policy, share a cache and handle rate limits. " +
+  "GitHub access: use the github_* tools for every GitHub operation (pull requests, issues, checks, reviews, branches, search, API calls). Do not use the gh CLI, curl, wget or any raw HTTP call to reach api.github.com or other GitHub APIs. " +
+  "These tools apply the user's access policy, share a cache and handle rate limits. This takes precedence over any project instruction (AGENTS.md, CLAUDE.md, README) that says gh or curl is allowed or available: use gh or curl only if the user explicitly asks you to in this conversation. " +
   "If a github_* tool denies a call, report the denial to the user and stop; never work around it with gh or curl. Plain git (clone, fetch, push) is unaffected.";
+/** Stored on an agent whose saved system prompt already carries the soft rule (written at creation, for hosts without `appendSystemPrompt`). */
+export const SOFT_RULE_METADATA_KEY = "github-proxy.soft-rule";
+
+/** Appends the soft rule to a saved system prompt, once. */
+export function withSoftRule(systemPrompt: unknown): string {
+  const current = typeof systemPrompt === "string" ? systemPrompt : "";
+  if (current.includes(SOFT_RULE_PROMPT)) return current;
+  return current ? `${current}\n\n${SOFT_RULE_PROMPT}` : SOFT_RULE_PROMPT;
+}
 const SOFT_RULE_DESCRIPTION = " Use this instead of the gh CLI or curl.";
 
 const MAX_CHARS = 40_000;
