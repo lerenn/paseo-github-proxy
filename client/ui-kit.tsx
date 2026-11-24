@@ -205,6 +205,26 @@ export function Sparkline({ theme, series, height = 56 }: { theme: Theme; series
   );
 }
 
+/** Stacked bars of webhook events, oldest first: delivered (green), ignored (muted) and rejected (red) from the bottom up. */
+export function EventBars({ theme, series, height = 56 }: { theme: Theme; series: { delivered: number; ignored: number; rejected: number }[]; height?: number }) {
+  const max = Math.max(1, ...series.map((p) => p.delivered + p.ignored + p.rejected));
+  return (
+    <View accessibilityLabel={`Webhook events per minute over the last ${series.length} minutes`} style={{ flexDirection: "row", alignItems: "flex-end", gap: 2, height }}>
+      {series.map((p, i) => {
+        const total = p.delivered + p.ignored + p.rejected;
+        const h = total === 0 ? 2 : Math.max(3, (total / max) * height);
+        return (
+          <View key={i} style={{ flex: 1, height: h, borderRadius: 2, overflow: "hidden", backgroundColor: theme.colors.surface2, flexDirection: "column-reverse" }}>
+            <View style={{ height: (p.delivered / Math.max(1, total)) * h, backgroundColor: theme.colors.statusSuccess }} />
+            <View style={{ height: (p.ignored / Math.max(1, total)) * h, backgroundColor: theme.colors.foregroundMuted }} />
+            <View style={{ height: (p.rejected / Math.max(1, total)) * h, backgroundColor: theme.colors.statusDanger }} />
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 export function Stat({ theme, label, value, hint, tone = "neutral" }: { theme: Theme; label: string; value: string; hint?: string; tone?: Tone }) {
   return (
     <View style={{ flexGrow: 1, flexBasis: 140, gap: 3, padding: 14, borderRadius: 12, backgroundColor: theme.colors.surface1, borderWidth: 1, borderColor: theme.colors.border }}>

@@ -377,7 +377,7 @@ export class GithubProxy {
     throw new ProxyError("auth", `GitHub rejected the credentials of the ${cred.label} (HTTP 401). Ask the user to check GitHub Proxy → Auth.`, 401);
   }
 
-  overview(): Overview {
+  overview(): Omit<Overview, "events"> {
     const config = this.deps.config();
     const now = this.clock();
     const warnings: string[] = [];

@@ -80,7 +80,7 @@ export default function contribute(server: PluginServerContext) {
 
   server.handle(overviewRpc, (_input, context) => {
     rt.capturePaseo(context?.paseo);
-    return rt.proxy.overview();
+    return { ...rt.proxy.overview(), events: rt.webhooks.eventStats() };
   });
   server.handle(configGetRpc, (_input, context) => {
     rt.capturePaseo(context?.paseo);

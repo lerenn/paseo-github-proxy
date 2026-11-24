@@ -1,8 +1,8 @@
 import { Icon } from "@getpaseo/plugin/client/ui";
 import { Text, View } from "react-native";
 import type { Overview, RateLimitView, SourceStatus } from "../shared/state";
-import { clock, countdown, percent, visibleSources } from "./format";
-import { Banner, BannerText, Bar, Button, Card, Heading, Muted, Pill, Sparkline, Stat, useNow, type Theme, type Tone } from "./ui-kit";
+import { clock, countdown, percent, rejectedBreakdown, visibleSources } from "./format";
+import { Banner, BannerText, Bar, Button, Card, EventBars, Heading, Muted, Pill, Sparkline, Stat, useNow, type Theme, type Tone } from "./ui-kit";
 
 const sourceLabel = (s: SourceStatus): string => (s.source === "gh" ? "gh CLI" : `GitHub App${s.key === "app:" ? "" : ` "${s.label}"`}`);
 const SOURCE_ICON = { gh: "Terminal", app: "KeyRound" } as const;
@@ -106,6 +106,26 @@ export function OverviewTab({ theme, data, onClearCache, onOpenAuth, fallback }:
           <Muted theme={theme}>now</Muted>
         </View>
       </Card>
+      {data.events.enabled ? (
+        <>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
+            <Stat theme={theme} label="Events received" value={data.events.stats.received.toLocaleString()} hint="Webhook deliveries" />
+            <Stat theme={theme} label="Delivered to subscribers" value={data.events.stats.delivered.toLocaleString()} hint="Woke at least one agent" tone={data.events.stats.delivered > 0 ? "good" : "neutral"} />
+            <Stat theme={theme} label="Ignored" value={data.events.stats.ignored.toLocaleString()} hint="No subscriber, pings, unused types" />
+            <Stat theme={theme} label="Rejected" value={data.events.stats.badSignature + data.events.stats.badOwner + data.events.stats.duplicate > 0 ? (data.events.stats.badSignature + data.events.stats.badOwner + data.events.stats.duplicate).toLocaleString() : "0"} hint={rejectedBreakdown(data.events.stats)} tone={data.events.stats.badSignature + data.events.stats.badOwner > 0 ? "bad" : "neutral"} />
+          </View>
+          <Card theme={theme}>
+            <Heading theme={theme} icon="Webhook" title="Webhook events per minute" hint="Last 30 minutes. Green: delivered to a subscriber. Grey: ignored (no subscriber). Red: rejected." />
+            <EventBars theme={theme} series={data.events.stats.series} />
+            <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+              <Muted theme={theme}>30 min ago</Muted>
+              <Muted theme={theme}>now</Muted>
+            </View>
+          </Card>
+        </>
+      ) : (
+        <Muted theme={theme}>Webhook events are not shown: turn on the webhook listener in the Auth tab to see them here.</Muted>
+      )}
       <View style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
         <Icon name="Info" size={12} color={theme.colors.foregroundMuted} />
         <Muted theme={theme}>Counters since the plugin last started.</Muted>

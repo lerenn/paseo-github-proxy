@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { SOURCE_OPTIONS, visibleSources, appSummary, toggleOpen, countdown, percent, presetOf, splitList, summarize, toggleChecked, withAlpha } from "./format";
+import { SOURCE_OPTIONS, visibleSources, appSummary, toggleOpen, countdown, percent, presetOf, rejectedBreakdown, splitList, summarize, toggleChecked, withAlpha } from "./format";
+
+describe("rejectedBreakdown", () => {
+  it("lists the reasons", () => {
+    expect(rejectedBreakdown({ badSignature: 2, badOwner: 1, duplicate: 0 })).toBe("2 signature · 1 owner · 0 duplicate");
+  });
+});
 
 describe("format", () => {
   it("counts down", () => {

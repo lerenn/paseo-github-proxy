@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import http from "node:http";
 import { resolveApp, WEBHOOK_PATH, type AppEntry, type WebhooksConfig } from "../shared/config";
+import { EventLog } from "./eventstats";
 import { eventOwner, parseEvent, type Parsed } from "./events";
 
 export const MAX_BODY_BYTES = 1_048_576;
@@ -39,8 +40,10 @@ export interface ReceiverDeps {
   secrets: () => { app: AppEntry; secret: string }[];
   /** Every App, to decide who serves an owner. */
   apps: () => AppEntry[];
-  /** Called for each accepted event; errors are swallowed and logged. */
-  onEvent: (parsed: Parsed) => void | Promise<void>;
+  /** Called for each accepted event; errors are swallowed and logged. Returns how many agents were woken: above zero counts the event as delivered to a subscriber. */
+  onEvent: (parsed: Parsed) => number | void | Promise<number | void>;
+  /** Per-minute outcomes, for the Overview. */
+  events?: EventLog;
   clock?: () => number;
   log?: (message: string) => void;
 }
@@ -61,11 +64,13 @@ export function signatureMatches(secret: string, rawBody: Buffer, header: string
 export class WebhookReceiver {
   readonly counters: WebhookCounters = { accepted: 0, badSignature: 0, badOwner: 0, ignored: 0, duplicate: 0 };
   lastDeliveryAt: number | null = null;
+  readonly events: EventLog;
   private seen = new Map<string, number>();
   private readonly clock: () => number;
 
   constructor(private readonly deps: ReceiverDeps) {
     this.clock = deps.clock ?? Date.now;
+    this.events = deps.events ?? new EventLog(this.clock);
   }
 
   private remember(delivery: string): boolean {
@@ -92,6 +97,7 @@ export class WebhookReceiver {
     for (const { app, secret } of this.deps.secrets()) if (signatureMatches(secret, req.body, signature) && !signer) signer = app;
     if (!signer) {
       this.counters.badSignature++;
+      this.events.record("badSignature");
       return { status: 401, text: "unauthorized" };
     }
 
@@ -104,32 +110,38 @@ export class WebhookReceiver {
     const event = req.headers["x-github-event"] ?? "";
     if (event === "ping") {
       this.counters.ignored++;
+      this.events.record("ignored");
       return { status: 200, text: "pong" };
     }
 
     const owner = eventOwner(payload);
     if (!owner || resolveApp(this.deps.apps(), owner)?.id !== signer.id) {
       this.counters.badOwner++;
+      this.events.record("badOwner");
       return { status: 403, text: "forbidden" };
     }
 
     const delivery = req.headers["x-github-delivery"] ?? "";
     if (delivery && !this.remember(delivery)) {
       this.counters.duplicate++;
+      this.events.record("duplicate");
       return { status: 200, text: "duplicate" };
     }
 
     const parsed = parseEvent(event, payload);
     if (!parsed) {
       this.counters.ignored++;
+      this.events.record("ignored");
       return { status: 200, text: "ignored" };
     }
     this.counters.accepted++;
+    let woken = 0;
     try {
-      await this.deps.onEvent(parsed);
+      woken = (await this.deps.onEvent(parsed)) || 0;
     } catch (error) {
       this.deps.log?.(`handling a ${event} event failed: ${(error as Error).message}`);
     }
+    this.events.record(woken > 0 ? "delivered" : "ignored");
     return { status: 200, text: "ok" };
   }
 }
@@ -186,6 +198,11 @@ export class WebhookServer {
   address(): number | null {
     const a = this.server?.address();
     return a && typeof a === "object" ? a.port : null;
+  }
+
+  /** Outcomes of the deliveries, for the Overview. */
+  eventStats() {
+    return { enabled: this.current.enabled, stats: this.receiver.events.stats() };
   }
 
   status(): WebhookStatus {

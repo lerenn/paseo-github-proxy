@@ -119,6 +119,7 @@ describe("server entry", () => {
     expect(await rpc(dryRunRpc, { kind: "rest", method: "PUT", path: "/repos/acme/x/pulls/1/merge" })).toMatchObject({ allowed: false, actions: ["merge", "generic_api_write"] });
     expect(await rpc(dryRunRpc, { kind: "rest", method: "GET", path: "/repos/acme/x/pulls" })).toMatchObject({ allowed: true });
     expect((await rpc(overviewRpc)).sources.map((s: { source: string }) => s.source)).toEqual(["gh", "app"]);
+    expect((await rpc(overviewRpc)).events).toMatchObject({ enabled: false, stats: { received: 0 } });
     expect(await rpc(activityRpc, { limit: 10 })).toEqual({ entries: [] });
   });
 

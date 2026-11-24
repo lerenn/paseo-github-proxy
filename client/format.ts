@@ -20,6 +20,11 @@ export function percent(ratio: number): string {
   return `${Math.round(ratio * 100)}%`;
 }
 
+/** "2 signature · 1 owner · 0 duplicate": why deliveries were rejected. */
+export function rejectedBreakdown(e: { badSignature: number; badOwner: number; duplicate: number }): string {
+  return `${e.badSignature} signature · ${e.badOwner} owner · ${e.duplicate} duplicate`;
+}
+
 /** Comma, space or newline separated list → trimmed unique non-empty items. */
 export function splitList(text: string): string[] {
   return [...new Set(text.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean))];
