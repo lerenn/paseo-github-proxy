@@ -70,14 +70,14 @@
 <tr><td>GraphQL mutation</td><td><code>generic_api_write</code> + the action of each root field (<code>mergePullRequest</code> → <code>merge</code>, <code>addComment</code> → <code>comment</code>, <code>deleteRef</code> → <code>delete_branch</code>, ...)</td></tr>
 </table>
 <h3 id="owners">Allowed owners</h3>
-<p>Checked before the policy. Exact, case-insensitive; <code>*</code> allows all; an empty list refuses everything. Paths that name no owner (<code>/user/repos</code>, a search without <code>repo:</code>, <code>org:</code> or <code>user:</code>, a GraphQL call without <code>repo</code>) are refused unless <code>*</code> is allowed.</p>
+<p>Checked before the policy. Exact, case-insensitive; <code>*</code> allows all; the default is <code>*</code>; an empty list refuses everything. Paths that name no owner (<code>/user/repos</code>, a search without <code>repo:</code>, <code>org:</code> or <code>user:</code>, a GraphQL call without <code>repo</code>) are refused unless <code>*</code> is allowed.</p>
 
 <h2 id="settings">Settings</h2>
 <table>
 <tr><th>Setting</th><th>Where</th><th>Default</th></tr>
 <tr><td>Active source (<code>gh</code> or <code>app</code>)</td><td>Auth</td><td><code>gh</code></td></tr>
 <tr><td>Fall back to the other source on rate limit</td><td>Auth</td><td>off</td></tr>
-<tr><td>Allowed owners</td><td>Auth</td><td>empty (refuses everything)</td></tr>
+<tr><td>Allowed owners</td><td>Auth</td><td><code>*</code> (every owner)</td></tr>
 <tr><td>GitHub App credentials</td><td>Auth</td><td>none</td></tr>
 <tr><td>Preset, default permissions, rules</td><td>Policy</td><td>Read-only, no rules</td></tr>
 <tr><td>Cache TTL in seconds (0 to 3600)</td><td>Policy</td><td>30</td></tr>

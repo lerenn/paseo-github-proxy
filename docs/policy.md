@@ -3,7 +3,7 @@
 Order of evaluation for one call:
 
 1. **Scope.** A request that cannot be tied to an owner (for example `/user/repos`, a search without `repo:`/`org:`/`user:`, a GraphQL call without `repo`) is denied unless `*` is an allowed owner.
-2. **Allowed owners.** Every owner the call touches must be listed (exact, case-insensitive) or `*`. Empty list: refuse all.
+2. **Allowed owners.** Every owner the call touches must be listed (exact, case-insensitive) or `*`. Default: `*` (all owners). Empty list (cleared by the user): refuse all.
 3. **Actions.** The call needs every action it is classified as. For each action: a matching **deny** rule denies; else a matching **allow** rule allows; else the default permissions decide.
 
 ## Classification of `github_api`

@@ -51,7 +51,7 @@
 <p>Press <strong>Test connection</strong>. Optionally turn on <strong>Fall back to the other source on rate limit</strong>: when the active source is exhausted, calls use the other one until its limit resets.</p>
 
 <h2 id="owners">3. Allow owners</h2>
-<p>In <strong>Auth → Allowed owners</strong>, add the GitHub users and organizations agents may act on, for example <code>acme</code> and <code>lerenn</code>. <code>*</code> allows every owner. <strong>While the list is empty every call is refused.</strong></p>
+<p>In <strong>Auth → Allowed owners</strong>, add the GitHub users and organizations agents may act on, for example <code>acme</code> and <code>lerenn</code>. The default <code>*</code> allows every owner; replace it to restrict agents. <strong>If you clear the list, every call is refused.</strong></p>
 
 <h2 id="policy">4. Set the policy</h2>
 <p>The <strong>Policy</strong> tab starts on <strong>Read-only</strong>. Pick a preset, adjust individual permissions, and add rules:</p>

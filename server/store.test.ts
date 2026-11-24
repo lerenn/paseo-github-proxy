@@ -16,9 +16,9 @@ const tmp = () => {
 afterEach(() => dirs.splice(0).forEach((d) => rmSync(d, { recursive: true, force: true })));
 
 describe("ConfigStore", () => {
-  it("defaults to read-only with no owners, gh as source and a 30 s TTL", () => {
+  it("defaults to read-only with every owner allowed, gh as source and a 30 s TTL", () => {
     const c = new ConfigStore(tmp()).get();
-    expect(c).toMatchObject({ activeSource: "gh", fallbackOnRateLimit: false, allowedOwners: [], cacheTtlSeconds: 30, forbidRawGithub: false });
+    expect(c).toMatchObject({ activeSource: "gh", fallbackOnRateLimit: false, allowedOwners: ["*"], cacheTtlSeconds: 30, forbidRawGithub: false });
     expect(c.policy.preset).toBe("read_only");
     expect(c.policy.defaultAllow).toEqual(["read", "generic_api_read"]);
   });

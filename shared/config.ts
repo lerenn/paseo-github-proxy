@@ -26,8 +26,8 @@ export type SourceId = (typeof SOURCES)[number];
 export const configSchema = z.object({
   activeSource: z.enum(SOURCES).default("gh"),
   fallbackOnRateLimit: z.boolean().default(false),
-  /** Lower-cased owners (users or orgs) the proxy may act on; `*` allows all. Empty refuses everything. */
-  allowedOwners: z.array(z.string()).default([]),
+  /** Lower-cased owners (users or orgs) the proxy may act on; `*` allows all (the default). Empty refuses everything. */
+  allowedOwners: z.array(z.string()).default(["*"]),
   cacheTtlSeconds: z.number().int().min(0).max(3600).default(30),
   forbidRawGithub: z.boolean().default(false),
   policy: policySchema.default({ preset: "read_only", defaultAllow: [...PRESET_INFO.read_only.allow], rules: [] }),
