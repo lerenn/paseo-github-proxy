@@ -40,6 +40,10 @@
 <h2 id="cache">Cache</h2>
 <p>Entries are keyed by method, URL and request body, kept in memory and in <code>cache.json</code> so they survive a restart, and trimmed oldest-used first (500 entries or about 25 MB). Reads are served locally for the TTL (30 seconds by default, 0 to 3600, set in the Policy tab). Past it, the saved ETag is sent. GraphQL queries have no ETag, so they are cached by TTL only; mutations are never cached.</p>
 
+<h2 id="webhooks">Webhooks and wake-ups (optional)</h2>
+<p>Off by default. When enabled in the Auth tab, the plugin starts a small HTTP listener (default <code>127.0.0.1:8787</code>, only <code>POST /webhook</code> and <code>GET /healthz</code>, bodies up to 1 MiB). GitHub needs a public URL, so you put a tunnel or reverse proxy (for example cloudflared) in front of it; the plugin does not create one. Each delivery must carry a valid <code>X-Hub-Signature-256</code> (HMAC-SHA256, constant-time compare) made with the webhook secret of one of your GitHub Apps, and its owner must be one that App serves. Secrets are stored only in <code>secrets.json</code>. Repeated delivery ids are dropped.</p>
+<p>An accepted event drops the cached reads it makes stale, so the next read is fresh without waiting for the TTL; ETag revalidation stays the fallback. It also wakes the agents whose <code>github_subscribe</code> subscriptions match (checks completed, review, comment, PR opened, merged or closed): a short prompt with the event, repository and pull request, plus a hint to read the details with the <code>github_*</code> tools. Subscriptions are one-shot by default, expire after 6 hours (7 days at most), and wake-ups are rate limited per agent.</p>
+
 <h2 id="limits">Rate limits</h2>
 <p>The plugin tracks <code>x-ratelimit-*</code> per credential (the gh CLI and each GitHub App) and per resource (<code>core</code>, <code>graphql</code>, <code>search</code>). A credential is blocked until its reset (the other Apps keep working) when a response says the limit is exhausted, carries <code>retry-after</code>, or reports a secondary limit. With nothing left to try, the agent gets a cached answer marked as stale when one exists, and otherwise an error such as <em>Retry at 14:07 (in about 12 min)</em>. The Overview tab shows the remaining count, a live countdown, and a warning when a limit is nearly used up.</p>
 
@@ -51,10 +55,11 @@
 <tr><th>File</th><th>Contents</th></tr>
 <tr><td><code>config.json</code></td><td>Active source, fallback, allowed owners, TTL, soft rule, hard rule, policy.</td></tr>
 <tr><td><code>apps.json</code></td><td>The GitHub Apps: organization, App ID, installation ID, extra owners, default flag. No secret.</td></tr>
-<tr><td><code>secrets.json</code> (0600)</td><td>The private key of each GitHub App.</td></tr>
+<tr><td><code>secrets.json</code> (0600)</td><td>The private key and the webhook secret of each GitHub App.</td></tr>
+<tr><td><code>subscriptions.json</code></td><td>The agents' event subscriptions. No secret.</td></tr>
 <tr><td><code>cache.json</code></td><td>Cached GitHub responses, kept per credential so an answer is never shared between Apps.</td></tr>
 </table>
-<p>All four are in <code>$PASEO_HOME/plugin-data/lerenn/paseo-github-proxy/</code>. The activity log and counters live in memory and reset when the plugin restarts.</p>
+<p>All files are in <code>$PASEO_HOME/plugin-data/lerenn/paseo-github-proxy/</code>. The activity log and counters live in memory and reset when the plugin restarts.</p>
 
 <h2 id="limits-known">Limits</h2>
 <ul>

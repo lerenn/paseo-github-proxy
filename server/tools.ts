@@ -4,6 +4,7 @@ import { ACTIONS, ACTION_INFO } from "../shared/actions";
 import { ProxyError } from "./proxy";
 import { accountTools } from "./tools-account";
 import { prTools } from "./tools-pr";
+import { eventTools } from "./tools-events";
 import { repoTools } from "./tools-repo";
 import { clip, clipText, createKit, issue, page, pagination, pr, repoField, served, type ToolsDeps } from "./toolkit";
 
@@ -225,6 +226,7 @@ export function buildTools(deps: ToolsDeps): AgentToolDefinition[] {
     ...prTools(kit),
     ...repoTools(kit),
     ...accountTools(kit),
+    ...eventTools(kit),
   ];
   return tools;
 }

@@ -1,7 +1,7 @@
 import { useRpc } from "@getpaseo/plugin/client";
 import { useToast } from "@getpaseo/plugin/client/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { discoverOwnersRpc, discoverReposRpc, activityRpc, appCredentialsClearRpc, appCredentialsSaveRpc, clearRpc, configGetRpc, configSaveRpc, overviewRpc } from "../shared/contracts";
+import { discoverOwnersRpc, discoverReposRpc, activityRpc, appCredentialsClearRpc, appCredentialsSaveRpc, clearRpc, configGetRpc, configSaveRpc, overviewRpc, subscriptionRemoveRpc, subscriptionsRpc, webhookSecretRpc, webhookStatusRpc } from "../shared/contracts";
 import type { Config } from "../shared/config";
 
 const POLL_MS = 2000;
@@ -63,11 +63,18 @@ export function useConfigData() {
       toast.show("GitHub App removed");
     },
   });
+  const secret = useRpc(webhookSecretRpc);
+  /** Generates or clears an App's webhook secret; a generated value is in the result once. */
+  const webhookSecret = useMutation({
+    mutationFn: (input: { id: string; action: "generate" | "clear" }) => secret(input),
+    onSuccess: ({ apps }) => refreshApps(apps),
+    onError: (error: Error) => toast.error(error.message),
+  });
   const clearData = useMutation({
     mutationFn: (what: "cache" | "activity") => clear({ what }),
     onSuccess: () => void client.invalidateQueries({ queryKey: ["github-proxy"] }),
   });
-  return { config: query.data?.config ?? null, apps: query.data?.apps ?? null, loading: query.isLoading, error: query.error as Error | null, change, appSave, appClear, clearData };
+  return { config: query.data?.config ?? null, apps: query.data?.apps ?? null, loading: query.isLoading, error: query.error as Error | null, change, appSave, appClear, webhookSecret, clearData };
 }
 
 /** Owners the active source can reach (gh user and orgs, or the accounts the Apps are installed on). Never throws: a failure becomes `error`. */
@@ -82,4 +89,19 @@ export function useRepoChoices(key: string) {
   const repos = useRpc(discoverReposRpc);
   const q = useQuery({ queryKey: ["github-proxy", "repos", key], queryFn: () => repos({}), staleTime: 60_000, retry: false });
   return { repos: q.data?.repos ?? [], errors: q.data?.errors ?? (q.error ? [(q.error as Error).message] : []), loading: q.isLoading };
+}
+
+export function useWebhookStatus() {
+  const status = useRpc(webhookStatusRpc);
+  return useQuery({ queryKey: ["github-proxy", "webhook"], queryFn: () => status({}), refetchInterval: POLL_MS });
+}
+
+export function useSubscriptions() {
+  const list = useRpc(subscriptionsRpc);
+  const remove = useRpc(subscriptionRemoveRpc);
+  const client = useQueryClient();
+  const key = ["github-proxy", "subscriptions"];
+  const query = useQuery({ queryKey: key, queryFn: () => list({}), refetchInterval: POLL_MS * 3 });
+  const unsubscribe = useMutation({ mutationFn: (id: string) => remove({ id }), onSuccess: (data) => client.setQueryData(key, data) });
+  return { subscriptions: query.data?.subscriptions, unsubscribe };
 }

@@ -1,4 +1,4 @@
-import { createPrivateKey } from "node:crypto";
+import { createPrivateKey, randomBytes } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -62,12 +62,17 @@ export class ConfigStore {
   private config: Config;
   private appList: AppEntry[] = [];
   private keys = new Map<string, string>();
+  /** Webhook secrets, per App id. Same file as the keys, same rules: never logged, never sent to the client. */
+  private hookSecrets = new Map<string, string>();
 
   constructor(private readonly dir: string) {
     const parsed = configSchema.safeParse(readJson(path.join(dir, "config.json")) ?? {});
     this.config = parsed.success ? parsed.data : defaultConfig();
-    const secrets = readJson(path.join(dir, "secrets.json")) as { app?: Partial<AppCredentials>; apps?: Record<string, { privateKey?: string }> } | null;
-    for (const [id, v] of Object.entries(secrets?.apps ?? {})) if (typeof v?.privateKey === "string" && v.privateKey) this.keys.set(id, v.privateKey);
+    const secrets = readJson(path.join(dir, "secrets.json")) as { app?: Partial<AppCredentials>; apps?: Record<string, { privateKey?: string; webhookSecret?: string }> } | null;
+    for (const [id, v] of Object.entries(secrets?.apps ?? {})) {
+      if (typeof v?.privateKey === "string" && v.privateKey) this.keys.set(id, v.privateKey);
+      if (typeof v?.webhookSecret === "string" && v.webhookSecret) this.hookSecrets.set(id, v.webhookSecret);
+    }
     const stored = readJson(path.join(dir, "apps.json")) as { apps?: unknown } | null;
     if (stored) {
       const list = z.array(appEntrySchema).safeParse(stored.apps ?? []);
@@ -98,7 +103,7 @@ export class ConfigStore {
   }
 
   private writeSecrets(): void {
-    writeJson(path.join(this.dir, "secrets.json"), { apps: Object.fromEntries([...this.keys].map(([id, privateKey]) => [id, { privateKey }])) }, 0o600);
+    writeJson(path.join(this.dir, "secrets.json"), { apps: Object.fromEntries([...this.keys].map(([id, privateKey]) => [id, { privateKey, ...(this.hookSecrets.has(id) ? { webhookSecret: this.hookSecrets.get(id) } : {}) }])) }, 0o600);
   }
 
   get(): Config {
@@ -120,7 +125,7 @@ export class ConfigStore {
   appViews(): AppCredentialsView[] {
     return this.appList.map((a) => {
       const key = this.keys.get(a.id);
-      return { ...a, configured: !!(key && a.appId && a.installationId), keyFingerprint: key ? keyFingerprint(key) : "" };
+      return { ...a, configured: !!(key && a.appId && a.installationId), webhookSecretSet: this.hookSecrets.has(a.id), keyFingerprint: key ? keyFingerprint(key) : "" };
     });
   }
 
@@ -128,6 +133,24 @@ export class ConfigStore {
     const app = this.appList.find((a) => a.id === id);
     const privateKey = this.keys.get(id);
     return app && privateKey ? { appId: app.appId, installationId: app.installationId, privateKey } : null;
+  }
+
+  /** The Apps that have a webhook secret, with the secret. Server side only: for verifying deliveries. */
+  webhookSecrets(): { app: AppEntry; secret: string }[] {
+    return this.appList.flatMap((app) => (this.hookSecrets.has(app.id) ? [{ app, secret: this.hookSecrets.get(app.id)! }] : []));
+  }
+
+  /** Stores a new random webhook secret for an App and returns it, once: it can not be read back. */
+  generateWebhookSecret(id: string): string {
+    if (!this.appList.some((a) => a.id === id)) throw new Error("That GitHub App no longer exists.");
+    const secret = randomBytes(32).toString("hex");
+    this.hookSecrets.set(id, secret);
+    this.writeSecrets();
+    return secret;
+  }
+
+  clearWebhookSecret(id: string): void {
+    if (this.hookSecrets.delete(id)) this.writeSecrets();
   }
 
   /** Adds or edits an App; returns its id. An empty key keeps the stored one. Errors are written for the user. */
@@ -168,6 +191,7 @@ export class ConfigStore {
   removeApp(id: string): void {
     this.appList = this.appList.filter((a) => a.id !== id);
     this.keys.delete(id);
+    this.hookSecrets.delete(id);
     this.writeApps();
     this.writeSecrets();
   }

@@ -12,6 +12,10 @@ import {
   dryRunRpc,
   overviewRpc,
   sourceCheckRpc,
+  subscriptionRemoveRpc,
+  subscriptionsRpc,
+  webhookSecretRpc,
+  webhookStatusRpc,
 } from "./shared/contracts";
 import { testAppConnection } from "./server/appcheck";
 import { appKey } from "./server/apps";
@@ -48,14 +52,15 @@ export default function contribute(server: PluginServerContext) {
 
   // Every agent gets the github_* tools; with the soft rule on, also an instruction to use them instead of gh/curl.
   // Paseo marks open sessions stale when the plugin reloads, and a changed setting applies to sessions opened afterwards.
-  server.addHook("agent.open.before", async ({ request }) => {
+  server.addHook("agent.open.before", async ({ request }, context) => {
+    rt.capturePaseo(context?.paseo);
     if (request.purpose === "history") return;
     const { forbidRawGithub } = rt.store.get();
     // Hosts from 0.17 take per-open instructions; older ones ignore the field and rely on the saved prompt above.
     const saved = request.metadata?.[SOFT_RULE_METADATA_KEY] === true;
     return {
       ...request,
-      tools: [...request.tools, ...buildTools({ proxy: rt.proxy, softRule: forbidRawGithub })],
+      tools: [...request.tools, ...buildTools({ proxy: rt.proxy, softRule: forbidRawGithub, subscriptions: rt.subscriptions, onContext: (p) => rt.capturePaseo(p) })],
       ...(forbidRawGithub && !saved ? { appendSystemPrompt: [...hostAppend(request), SOFT_RULE_PROMPT] } : {}),
     };
   });
@@ -73,9 +78,32 @@ export default function contribute(server: PluginServerContext) {
     }
   });
 
-  server.handle(overviewRpc, () => rt.proxy.overview());
-  server.handle(configGetRpc, () => ({ config: rt.store.get(), apps: rt.store.appViews() }));
-  server.handle(configSaveRpc, ({ config }) => ({ config: rt.store.set(config) }));
+  server.handle(overviewRpc, (_input, context) => {
+    rt.capturePaseo(context?.paseo);
+    return rt.proxy.overview();
+  });
+  server.handle(configGetRpc, (_input, context) => {
+    rt.capturePaseo(context?.paseo);
+    return { config: rt.store.get(), apps: rt.store.appViews() };
+  });
+  server.handle(configSaveRpc, async ({ config }, context) => {
+    rt.capturePaseo(context?.paseo);
+    const saved = rt.store.set(config);
+    await rt.webhooks.apply(saved.webhooks);
+    return { config: saved };
+  });
+  server.handle(webhookStatusRpc, () => rt.webhooks.status());
+  server.handle(webhookSecretRpc, ({ id, action }) => {
+    let secret = "";
+    if (action === "generate") secret = rt.store.generateWebhookSecret(id);
+    else rt.store.clearWebhookSecret(id);
+    return { apps: rt.store.appViews(), secret };
+  });
+  server.handle(subscriptionsRpc, () => ({ subscriptions: rt.subscriptions.all() }));
+  server.handle(subscriptionRemoveRpc, ({ id }) => {
+    rt.subscriptions.remove(id);
+    return { subscriptions: rt.subscriptions.all() };
+  });
   server.handle(appCredentialsSaveRpc, (input) => {
     const id = rt.store.saveApp(input);
     rt.apps.forget(id);
@@ -134,6 +162,9 @@ export default function contribute(server: PluginServerContext) {
   server.handle(dryRunRpc, ({ kind, method, path, query, repo }) =>
     rt.proxy.dryRun(kind === "graphql" ? { kind, query, repo } : { kind, method, path }),
   );
+
+  // The listener is off unless the user enabled it. A start error is shown in the Auth tab, never thrown.
+  void rt.webhooks.apply(rt.store.get().webhooks);
 
   return () => rt.dispose();
 }

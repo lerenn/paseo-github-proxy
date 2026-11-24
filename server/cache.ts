@@ -91,6 +91,19 @@ export class ResponseCache {
     if (changed) this.schedule();
   }
 
+  /** Drops every entry whose key the test accepts (after a webhook event). Returns how many went. */
+  invalidateWhere(test: (key: string) => boolean): number {
+    let dropped = 0;
+    for (const key of [...this.entries.keys()]) {
+      if (test(key)) {
+        this.entries.delete(key);
+        dropped++;
+      }
+    }
+    if (dropped) this.schedule();
+    return dropped;
+  }
+
   clear(): void {
     this.entries.clear();
     this.schedule();

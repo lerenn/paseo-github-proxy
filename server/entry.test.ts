@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import contribute from "../index.server";
-import { activityRpc, appCredentialsClearRpc, appCredentialsSaveRpc, configGetRpc, configSaveRpc, dryRunRpc, overviewRpc, sourceCheckRpc } from "../shared/contracts";
+import { activityRpc, appCredentialsClearRpc, appCredentialsSaveRpc, subscriptionsRpc, webhookSecretRpc, webhookStatusRpc, configGetRpc, configSaveRpc, dryRunRpc, overviewRpc, sourceCheckRpc } from "../shared/contracts";
 import { defaultConfig } from "../shared/config";
 import { HARD_RULE_MESSAGE } from "./hardrule";
 import { SOFT_RULE_METADATA_KEY, SOFT_RULE_PROMPT } from "./tools";
@@ -38,7 +38,7 @@ describe("server entry", () => {
     const { handlers, hooks } = load();
     expect([...handlers.keys()].sort()).toEqual(
       ["github-proxy.activity", "github-proxy.app.clear", "github-proxy.app.save",
-      "github-proxy.app.test", "github-proxy.clear", "github-proxy.config.get", "github-proxy.config.save", "github-proxy.discover.owners", "github-proxy.discover.repos", "github-proxy.dry-run", "github-proxy.overview", "github-proxy.source.check"].sort(),
+      "github-proxy.app.test", "github-proxy.clear", "github-proxy.config.get", "github-proxy.config.save", "github-proxy.discover.owners", "github-proxy.discover.repos", "github-proxy.dry-run", "github-proxy.overview", "github-proxy.source.check", "github-proxy.subscriptions", "github-proxy.subscriptions.remove", "github-proxy.webhook.secret", "github-proxy.webhook.status"].sort(),
     );
     expect(hooks.has("agent.open.before")).toBe(true);
   });
@@ -137,5 +137,19 @@ describe("server entry", () => {
     expect((await rpc(sourceCheckRpc, { source: "app", app: "nope" })).ok).toBe(false);
     const after = await rpc(appCredentialsClearRpc, { id: a.id });
     expect(after.apps.map((x: { organization: string }) => x.organization)).toEqual(["me"]);
+  });
+
+  it("keeps the webhook listener off by default and shows a webhook secret once", async () => {
+    const { rpc } = load();
+    const { generateKeyPairSync } = await import("node:crypto");
+    const pem = generateKeyPairSync("rsa", { modulusLength: 2048, privateKeyEncoding: { type: "pkcs8", format: "pem" }, publicKeyEncoding: { type: "spki", format: "pem" } }).privateKey;
+    expect(await rpc(webhookStatusRpc)).toMatchObject({ enabled: false, listening: false, bind: "127.0.0.1", path: "/webhook", appsWithSecret: 0 });
+    const a = await rpc(appCredentialsSaveRpc, { organization: "Org", appId: "1", installationId: "2", owners: [], privateKey: pem });
+    const made = await rpc(webhookSecretRpc, { id: a.id, action: "generate" });
+    expect(made.secret).toMatch(/^[0-9a-f]{64}$/);
+    expect(made.apps[0].webhookSecretSet).toBe(true);
+    expect(JSON.stringify(await rpc(configGetRpc))).not.toContain(made.secret);
+    expect((await rpc(webhookSecretRpc, { id: a.id, action: "clear" })).apps[0].webhookSecretSet).toBe(false);
+    expect((await rpc(subscriptionsRpc)).subscriptions).toEqual([]);
   });
 });

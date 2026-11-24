@@ -7,6 +7,7 @@ import { appName, appOwners, isOwnerName, type AppCredentialsView, type Config }
 import { appTestRpc } from "../shared/contracts";
 import { appSummary, summarize, toggleOpen } from "./format";
 import { Banner, BannerText, Button, Card, Field, Heading, Muted, MultiSelect, Pill, Toggle, toneColor, type Theme } from "./ui-kit";
+import { WebhookSecretRow } from "./webhooks";
 import { useOwnerChoices, type useConfigData } from "./data";
 
 type ConfigData = ReturnType<typeof useConfigData>;
@@ -83,6 +84,7 @@ function AppEditor({ theme, app, apps, config, data, open, onToggle, onDone }: {
         loading={found.loading}
         note="Optional: other organizations or users covered by the same installation. The organization above is always served; an owner belongs to one App only."
       />
+      {app ? <WebhookSecretRow theme={theme} app={app} data={data} /> : <Muted theme={theme}>Save the App first, then generate its webhook secret.</Muted>}
       <Toggle theme={theme} value={isDefault} onChange={setDefault} label="Default App" hint={others.length && isDefault ? `Serves every allowed owner that no App claims, and calls that name no owner. Saving makes ${appName(others[0]!)} stop being the default.` : "Catch-all for owners no App claims, and calls that name no owner. Only one App is the default."} />
       {clash ? <Banner theme={theme} tone="warn" icon="TriangleAlert"><BannerText theme={theme}>{`"${clash}" is already served by ${claimedBy.get(clash)}: saving will be refused.`}</BannerText></Banner> : null}
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>

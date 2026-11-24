@@ -171,6 +171,7 @@ Tools with an `operation` input group related commands so the tool list stays sh
 | organization profile, members, teams | `github_account` org, org_members, org_teams (`read`) | added | |
 | user profile, `auth status` (who am I) | `github_account` user, me (`read`) | added | |
 | `status` | `github_account` notifications (`read`) | added | |
+| (no `gh` equivalent) wake an agent on an event | `github_subscribe` (`subscribe_events`) | added | needs the webhook listener |
 | mark notifications read | `github_account` mark_read (`manage_notifications`) | added | |
 
 ## gh api and the rest

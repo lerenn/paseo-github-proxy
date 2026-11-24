@@ -76,7 +76,7 @@ describe("ConfigStore", () => {
     const dir = tmp();
     writeFileSync(path.join(dir, "secrets.json"), JSON.stringify({ app: { appId: "12", installationId: "34", privateKey } }), { mode: 0o600 });
     const first = new ConfigStore(dir);
-    expect(first.appViews()).toEqual([{ id: "default", organization: "", label: "GitHub App", appId: "12", installationId: "34", owners: [], default: true, configured: true, keyFingerprint: expect.any(String) }]);
+    expect(first.appViews()).toEqual([{ id: "default", organization: "", label: "GitHub App", appId: "12", installationId: "34", owners: [], default: true, configured: true, webhookSecretSet: false, keyFingerprint: expect.any(String) }]);
     expect(first.appCredentials("default")).toEqual({ appId: "12", installationId: "34", privateKey });
     // persisted in the new layout: the legacy entry is gone and a reload sees the same App
     const secrets = JSON.parse(readFileSync(path.join(dir, "secrets.json"), "utf8"));
@@ -152,5 +152,30 @@ describe("ConfigStore", () => {
     writeFileSync(path.join(dir, "apps.json"), JSON.stringify({ apps: [{ id: "a", label: "acme", appId: "1", installationId: "2", owners: [], default: false }, { id: "b", label: "Team", appId: "3", installationId: "4", owners: ["me"], default: true }] }));
     const s = new ConfigStore(dir);
     expect(s.apps().map((x) => [appName(x), appOwners(x), x.default])).toEqual([["acme", ["acme"], false], ["Team", ["me"], true]]);
+  });
+
+  it("keeps a webhook secret only in secrets.json (0600): never in the views, config or apps.json; shown once", () => {
+    const dir = tmp();
+    const s = new ConfigStore(dir);
+    const id = s.saveApp({ organization: "acme", appId: "1", installationId: "2", owners: [], default: true, privateKey });
+    expect(s.appViews()[0]!.webhookSecretSet).toBe(false);
+    const secret = s.generateWebhookSecret(id);
+    expect(secret).toMatch(/^[0-9a-f]{64}$/);
+    expect(s.appViews()[0]!.webhookSecretSet).toBe(true);
+    expect(JSON.stringify(s.appViews())).not.toContain(secret);
+    expect(readFileSync(path.join(dir, "secrets.json"), "utf8")).toContain(secret);
+    expect(readFileSync(path.join(dir, "apps.json"), "utf8")).not.toContain(secret);
+    s.set({ ...s.get() });
+    expect(readFileSync(path.join(dir, "config.json"), "utf8")).not.toContain(secret);
+    expect(statSync(path.join(dir, "secrets.json")).mode & 0o777).toBe(0o600);
+    expect(new ConfigStore(dir).webhookSecrets().map((x) => x.secret)).toEqual([secret]);
+    // saving the App again keeps the secret; removing the App removes it
+    s.saveApp({ id, organization: "acme", appId: "1", installationId: "2", owners: [], default: true, privateKey: "" });
+    expect(s.webhookSecrets()).toHaveLength(1);
+    s.clearWebhookSecret(id);
+    expect(s.webhookSecrets()).toHaveLength(0);
+    s.generateWebhookSecret(id);
+    s.removeApp(id);
+    expect(readFileSync(path.join(dir, "secrets.json"), "utf8")).not.toMatch(/webhookSecret/);
   });
 });

@@ -20,6 +20,10 @@ An optional setting adds an instruction to every agent's system prompt and tool 
 
 A second, optional setting (the hard rule) denies permission requests for shell commands that run `gh`, or `curl` or `wget` against GitHub, and tells the agent to use these tools. It only applies when the agent asks for permission (an agent in a bypass mode never does) and it matches command text, so it is not a sandbox. A real block needs network rules on the machine that runs the daemon.
 
+## Webhooks and wake-ups
+
+Optional and off by default. Turn on the webhook listener in Auth, give each GitHub App a generated webhook secret, and point GitHub at it through a public URL that you provide (a tunnel or reverse proxy such as cloudflared). Verified events refresh the cache at once, and agents can ask to be woken when checks finish, a review or comment arrives, or a pull request is merged or closed (`github_subscribe`, policy action Subscribe to events, off in the read-only preset).
+
 ## Good to know
 
 - Needs Paseo 0.16.2 or later.
