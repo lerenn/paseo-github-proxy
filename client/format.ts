@@ -59,3 +59,22 @@ export const SOURCE_OPTIONS: { id: SourceId; title: string; text: string; icon: 
   { id: "app", title: "GitHub Apps", text: "Dedicated App installations, one per owner, each with its own rate limit.", icon: "KeyRound" },
 ];
 
+
+/** Compact summary of an App for its collapsed row: the owner it serves (or a count) and its App ID. */
+export function appSummary(app: { owners: string[]; appId: string; default: boolean }): string {
+  const owners = app.owners.length === 1 ? app.owners[0]! : app.owners.length > 1 ? `${app.owners.length} owners` : app.default ? "Rest" : "No owner";
+  return app.appId ? `${owners} · App ${app.appId}` : owners;
+}
+
+/** Opens or closes one entry of the set of open ids. */
+export function toggleOpen(open: readonly string[], id: string): string[] {
+  return open.includes(id) ? open.filter((x) => x !== id) : [...open, id];
+}
+
+/**
+ * The rate-limit sources to show on the Overview: the active source (every App when it is "app"), plus the other
+ * source only when the rate-limit fallback is on, since that is the only way it can serve a call.
+ */
+export function visibleSources<T extends { active: boolean }>(sources: readonly T[], fallback: boolean): T[] {
+  return sources.filter((s) => s.active || fallback);
+}

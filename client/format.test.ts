@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SOURCE_OPTIONS, countdown, percent, presetOf, splitList, summarize, toggleChecked, withAlpha } from "./format";
+import { SOURCE_OPTIONS, visibleSources, appSummary, toggleOpen, countdown, percent, presetOf, splitList, summarize, toggleChecked, withAlpha } from "./format";
 
 describe("format", () => {
   it("counts down", () => {
@@ -39,5 +39,23 @@ describe("format", () => {
 describe("source options", () => {
   it("lists both sources once, gh first", () => {
     expect(SOURCE_OPTIONS.map((o) => o.id)).toEqual(["gh", "app"]);
+  });
+  it("summarizes a collapsed App row", () => {
+    expect(appSummary({ owners: ["acme"], appId: "1", default: false })).toBe("acme · App 1");
+    expect(appSummary({ owners: ["a", "b"], appId: "1", default: true })).toBe("2 owners · App 1");
+    expect(appSummary({ owners: [], appId: "", default: true })).toBe("Rest");
+    expect(appSummary({ owners: [], appId: "2", default: false })).toBe("No owner · App 2");
+  });
+  it("toggles open entries", () => {
+    expect(toggleOpen([], "a")).toEqual(["a"]);
+    expect(toggleOpen(["a", "b"], "a")).toEqual(["b"]);
+  });
+  it("shows only the sources in use on the Overview", () => {
+    const all = [{ key: "gh", active: false }, { key: "app:a", active: true }, { key: "app:b", active: true }];
+    expect(visibleSources(all, false).map((s) => s.key)).toEqual(["app:a", "app:b"]);
+    expect(visibleSources(all, true)).toHaveLength(3);
+    const gh = [{ key: "gh", active: true }, { key: "app:a", active: false }];
+    expect(visibleSources(gh, false).map((s) => s.key)).toEqual(["gh"]);
+    expect(visibleSources(gh, true)).toHaveLength(2);
   });
 });
