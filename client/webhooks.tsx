@@ -1,7 +1,7 @@
 import { Icon } from "@getpaseo/plugin/client/ui";
 import { useState } from "react";
 import { Text, View } from "react-native";
-import { WEBHOOK_PATH, type AppCredentialsView, type Config } from "../shared/config";
+import { WEBHOOK_EVENTS, WEBHOOK_PATH, type AppCredentialsView, type Config } from "../shared/config";
 import { clock } from "./format";
 import { Banner, BannerText, Button, Card, Field, Heading, Muted, Pill, Stat, Toggle, type Theme } from "./ui-kit";
 import { useSubscriptions, useWebhookStatus, type useConfigData } from "./data";
@@ -35,7 +35,7 @@ export function WebhooksCard({ theme, config, apps, data }: { theme: Theme; conf
           <View style={{ gap: 4 }}>
             <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12, fontWeight: "600" }}>Payload URL to give GitHub</Text>
             <Text selectable style={{ color: theme.colors.foreground, fontSize: 13, fontFamily: "monospace" }}>{`https://<your public host>${WEBHOOK_PATH}`}</Text>
-            <Muted theme={theme}>{`The listener itself is at ${localUrl} (health check: /healthz). GitHub can only reach a public URL: put a tunnel or reverse proxy (for example cloudflared) in front that forwards to it. The plugin does not create one. In the App's settings set the Webhook URL to that address, the secret to the one generated here, content type application/json, and subscribe to pull requests, reviews, comments, checks and workflow runs.`}</Muted>
+            <Muted theme={theme}>{`The listener itself is at ${localUrl} (health check: /healthz). GitHub can only reach a public URL: put a tunnel or reverse proxy (for example cloudflared) in front that forwards to it. The plugin does not create one. In the App's settings set the Webhook URL to that address, the secret to the one generated here, content type application/json, and subscribe the App to these events: ${WEBHOOK_EVENTS.join(", ")}.`}</Muted>
           </View>
           {c ? (
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
