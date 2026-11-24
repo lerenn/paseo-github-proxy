@@ -54,7 +54,20 @@ Curated tools state their action directly and do not need `generic_api_*`. A too
 | `manage_project` | `github_project` add_item, set_field | low |
 | `subscribe_events` | `github_subscribe` subscribe (list and unsubscribe only touch the agent's own subscriptions and are not checked) | low |
 
-`update_pr` also covers labels, assignees, locking, reviewers, marking ready or draft, updating the branch, and editing or deleting comments; `merge` also covers auto-merge and syncing a fork. The PR workflow preset adds `create_branch`, `manage_labels` and `manage_notifications` to what it allowed before. `subscribe_events` is allowed by the PR workflow and Full presets and denied by Read-only. Presets saved by an earlier version keep their stored list: new actions are denied until you check them.
+`update_pr` also covers labels, assignees, locking, reviewers, marking ready or draft, updating the branch, and editing or deleting comments; `merge` also covers auto-merge and syncing a fork. The PR workflow preset adds `create_branch`, `manage_labels` and `manage_notifications` to what it allowed before. `subscribe_events` is allowed by the PR workflow and Full presets and denied by Read-only. 
+## Upgrading a saved policy
+
+A policy keeps the action list it was saved with. So that a new action does not silently break a workflow the policy already allows, a policy saved before an action existed (it records the catalog version it was saved at) gets that action on first load wherever an action that implies it is allowed, in the default permissions and in each rule that lists actions (an allow rule gains it, a deny rule denies it too). Rules for all actions are untouched.
+
+| New action | Implied by |
+| --- | --- |
+| `create_branch` | `create_pr` (a pull request needs a branch) |
+| `manage_labels` | `update_pr` (it already labels pull requests and issues) |
+| `subscribe_events` | `comment` |
+
+Every other new action (`write_file`, `manage_release`, `manage_actions`, `manage_variables`, `create_repo`, `edit_repo`, `manage_gists`, `manage_notifications`, `manage_project`) is never implied: it stays denied until you check it. Read-only stays read-only. Once the policy is migrated or saved from the Policy tab it is stamped with the current version, so an action you uncheck later is not granted again.
+
+A denial names the action, the rule or the default policy, and where to enable it (the Policy tab). For `create_branch` and `write_file` it also notes that plain git commands are not affected by the policy.
 
 ## Paths without an owner
 

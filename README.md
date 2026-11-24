@@ -43,6 +43,8 @@ Each App has an **Organization or user** (the account it is installed on, for ex
 
 Pick **one active source**: the `gh` CLI, or the GitHub Apps (each call then uses the App of its owner). Optionally turn on **Fall back to the other source on rate limit**. If an owner has no App (and there is no default App), the agent is told that no App serves that owner and not to retry, unless the fallback lets `gh` answer.
 
+Upgrading a policy: an action added after your policy was saved is allowed where an implying action is (`create_branch` where `create_pr` is, `manage_labels` where `update_pr` is, `subscribe_events` where `comment` is); destructive and admin actions are never implied. See `docs/policy.md`.
+
 Upgrading: a single App saved by an earlier version becomes one **default** App labelled "GitHub App" on first start, with its key moved to the new secrets layout; nothing needs to be re-entered. Apps saved with a label: if the label is a valid GitHub account name and the App claimed no owner, it becomes the organization; otherwise the label stays as a display name and the owners stay as they were (set the organization when you want it claimed).
 
 ### 2. Allow owners (Auth tab)

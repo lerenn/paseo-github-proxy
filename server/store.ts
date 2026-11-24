@@ -2,8 +2,9 @@ import { createPrivateKey, randomBytes } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
+import { CATALOG_VERSION } from "../shared/actions";
 import { z } from "zod";
-import { appEntrySchema, appName, appOwners, isOwnerName, configSchema, defaultConfig, type AppCredentialsView, type AppEntry, type Config } from "../shared/config";
+import { migratePolicy, appEntrySchema, appName, appOwners, isOwnerName, configSchema, defaultConfig, type AppCredentialsView, type AppEntry, type Config } from "../shared/config";
 import { keyFingerprint, type AppCredentials } from "./auth";
 
 /** `$PASEO_HOME/plugin-data/lerenn/paseo-github-proxy`. */
@@ -68,6 +69,15 @@ export class ConfigStore {
   constructor(private readonly dir: string) {
     const parsed = configSchema.safeParse(readJson(path.join(dir, "config.json")) ?? {});
     this.config = parsed.success ? parsed.data : defaultConfig();
+    const migrated = migratePolicy(this.config.policy);
+    if (migrated !== this.config.policy) {
+      this.config = { ...this.config, policy: migrated };
+      try {
+        writeJson(path.join(dir, "config.json"), this.config, 0o600);
+      } catch (error) {
+        console.error("[github-proxy] could not save the migrated policy:", (error as Error).message);
+      }
+    }
     const secrets = readJson(path.join(dir, "secrets.json")) as { app?: Partial<AppCredentials>; apps?: Record<string, { privateKey?: string; webhookSecret?: string }> } | null;
     for (const [id, v] of Object.entries(secrets?.apps ?? {})) {
       if (typeof v?.privateKey === "string" && v.privateKey) this.keys.set(id, v.privateKey);
@@ -112,9 +122,11 @@ export class ConfigStore {
 
   set(next: Config): Config {
     const parsed = configSchema.parse({ ...next, allowedOwners: next.allowedOwners.map((o) => o.trim().toLowerCase()).filter(Boolean) });
-    this.config = parsed;
-    writeJson(path.join(this.dir, "config.json"), parsed, 0o600);
-    return parsed;
+    // What the user saves is their decision for every action of the catalog: stamp it so it is never migrated again.
+    const saved = { ...parsed, policy: { ...parsed.policy, actionsVersion: CATALOG_VERSION } };
+    this.config = saved;
+    writeJson(path.join(this.dir, "config.json"), saved, 0o600);
+    return saved;
   }
 
   apps(): AppEntry[] {

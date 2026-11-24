@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { actionSchema, PRESET_INFO, type Action } from "./actions";
+import { ACTION_SINCE, ACTIONS, actionSchema, CATALOG_VERSION, IMPLIED_BY, PRESET_INFO, type Action } from "./actions";
 
 export const ruleSchema = z.object({
   id: z.string(),
@@ -17,8 +17,30 @@ export const policySchema = z.object({
   /** Actions allowed where no rule matches. */
   defaultAllow: z.array(actionSchema).default([...PRESET_INFO.read_only.allow]),
   rules: z.array(ruleSchema).default([]),
+  /** The action catalog version the policy was last saved at; a policy without one predates versioning (1). */
+  actionsVersion: z.number().int().min(1).default(1),
 });
 export type Policy = z.infer<typeof policySchema>;
+
+/**
+ * Brings a stored policy up to the current action catalog. An action added after the policy was saved is allowed
+ * where an action that implies it is allowed (see IMPLIED_BY), in the default permissions and in each rule that
+ * lists actions; a rule for all actions is left alone. The version is then stamped, so an action the user unchecks
+ * later is never granted again.
+ */
+export function migratePolicy(policy: Policy): Policy {
+  if (policy.actionsVersion >= CATALOG_VERSION) return policy;
+  const added = ACTIONS.filter((a) => (ACTION_SINCE[a] ?? 1) > policy.actionsVersion && IMPLIED_BY[a]);
+  const implied = (a: Action, has: (x: Action) => boolean) => IMPLIED_BY[a]!.some(has);
+  const defaultAllow = [...policy.defaultAllow];
+  for (const a of added) if (!defaultAllow.includes(a) && implied(a, (x) => policy.defaultAllow.includes(x))) defaultAllow.push(a);
+  const rules = policy.rules.map((rule) => {
+    if (rule.actions.length === 0 || rule.actions.includes("*")) return rule;
+    const extra = added.filter((a) => !rule.actions.includes(a) && implied(a, (x) => rule.actions.includes(x)));
+    return extra.length ? { ...rule, actions: [...rule.actions, ...extra] } : rule;
+  });
+  return { ...policy, defaultAllow: ACTIONS.filter((a) => defaultAllow.includes(a)), rules, actionsVersion: CATALOG_VERSION };
+}
 
 export const SOURCES = ["gh", "app"] as const;
 export type SourceId = (typeof SOURCES)[number];
@@ -43,7 +65,7 @@ export const configSchema = z.object({
   /** The hard rule: deny permission requests for gh, and curl or wget aimed at GitHub. Off by default. */
   blockRawGithub: z.boolean().default(false),
   webhooks: webhooksSchema.default({ enabled: false, port: 8787, bind: "127.0.0.1" }),
-  policy: policySchema.default({ preset: "read_only", defaultAllow: [...PRESET_INFO.read_only.allow], rules: [] }),
+  policy: policySchema.default({ preset: "read_only", defaultAllow: [...PRESET_INFO.read_only.allow], rules: [], actionsVersion: CATALOG_VERSION }),
 });
 export type Config = z.infer<typeof configSchema>;
 
@@ -52,7 +74,7 @@ export function defaultConfig(): Config {
 }
 
 export function presetPolicy(preset: "read_only" | "pr_workflow" | "full", rules: Rule[] = []): Policy {
-  return { preset, defaultAllow: [...PRESET_INFO[preset].allow] as Action[], rules };
+  return { preset, defaultAllow: [...PRESET_INFO[preset].allow] as Action[], rules, actionsVersion: CATALOG_VERSION };
 }
 
 /** A valid GitHub user or organization login. */
@@ -122,3 +144,23 @@ export function resolveApp(apps: AppEntry[], owner: string): AppEntry | null {
   const o = owner.trim().toLowerCase();
   return (o ? apps.find((a) => appOwners(a).includes(o)) : undefined) ?? apps.find((a) => a.default) ?? null;
 }
+
+/**
+ * The webhook events the plugin reads. GitHub sends only the events the App is subscribed to, so the user subscribes the
+ * App to these (App settings, Permissions and events, Subscribe to events). The listener ignores every other event.
+ */
+export const WEBHOOK_EVENTS = [
+  "check_run",
+  "check_suite",
+  "issue_comment",
+  "merge_group",
+  "pull_request",
+  "pull_request_review",
+  "pull_request_review_comment",
+  "push",
+  "release",
+  "status",
+  "workflow_run",
+] as const;
+/** Also read, for the cache only (no wake-up): subscribe to them to keep issue and thread reads fresh. */
+export const WEBHOOK_EVENTS_CACHE_ONLY = ["issues", "pull_request_review_thread"] as const;
