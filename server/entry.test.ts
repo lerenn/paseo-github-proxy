@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import contribute from "../index.server";
 import { activityRpc, configGetRpc, configSaveRpc, dryRunRpc, overviewRpc } from "../shared/contracts";
 import { defaultConfig } from "../shared/config";
-import { SOFT_RULE_PROMPT } from "./tools";
+import { SOFT_RULE_METADATA_KEY, SOFT_RULE_PROMPT } from "./tools";
 
 let home: string;
 beforeEach(() => {
@@ -57,6 +57,30 @@ describe("server entry", () => {
     const out = await hooks.get("agent.open.before")!({ request: request({ appendSystemPrompt: ["existing"] }) }, {});
     expect(out.appendSystemPrompt).toEqual(["existing", SOFT_RULE_PROMPT]);
     expect(out.tools[0].description).toMatch(/instead of the gh CLI or curl/);
+  });
+
+  it("the soft rule is also saved in a new agent's system prompt, for hosts without appendSystemPrompt", async () => {
+    const { hooks, rpc } = load();
+    const create = hooks.get("agent.create.before")!;
+    const req = (config: object) => ({ request: { config: { provider: "claude", cwd: "/x", ...config }, metadata: { keep: 1 } } });
+    expect(await create(req({}), {})).toBeUndefined();
+    const { config } = await rpc(configGetRpc);
+    await rpc(configSaveRpc, { config: { ...config, forbidRawGithub: true } });
+    const out = await create(req({ systemPrompt: "Mail note." }), {});
+    expect(out.config.systemPrompt).toBe(`Mail note.\n\n${SOFT_RULE_PROMPT}`);
+    expect(out.metadata).toEqual({ keep: 1, [SOFT_RULE_METADATA_KEY]: true });
+    expect((await create(req({}), {})).config.systemPrompt).toBe(SOFT_RULE_PROMPT);
+    expect((await create({ request: { config: { provider: "claude", cwd: "/x", systemPrompt: SOFT_RULE_PROMPT } } }, {})).config.systemPrompt).toBe(SOFT_RULE_PROMPT);
+    expect(await create(req({ internal: true }), {})).toBeUndefined();
+  });
+
+  it("does not append the soft rule at open when the agent already saved it", async () => {
+    const { hooks, rpc } = load();
+    const { config } = await rpc(configGetRpc);
+    await rpc(configSaveRpc, { config: { ...config, forbidRawGithub: true } });
+    const out = await hooks.get("agent.open.before")!({ request: request({ metadata: { [SOFT_RULE_METADATA_KEY]: true } }) }, {});
+    expect(out.appendSystemPrompt).toBeUndefined();
+    expect(out.tools.length).toBeGreaterThan(0);
   });
 
   it("config persists across a reload and never exposes secrets", async () => {

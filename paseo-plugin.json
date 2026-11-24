@@ -3,6 +3,6 @@
   "name": "GitHub Proxy",
   "description": "Give every agent policy-controlled, rate-limit-aware GitHub tools instead of raw gh and curl: cached reads, allow/deny rules per repo and action, and a live activity log.",
   "icon": "assets/icon.png",
-  "requirements": { "paseo": ">=0.17.0" },
+  "requirements": { "paseo": ">=0.16.2" },
   "media": []
 }

@@ -25,7 +25,7 @@
 <p class="lead">The proxy runs inside the Paseo daemon, as part of the plugin. There is no external service.</p>
 
 <h2 id="tools">The injected tools</h2>
-<p>When an agent session opens, the plugin adds its <code>github_*</code> tools to it (Paseo exposes plugin agent tools to the agent as MCP tools). Every agent gets them; sessions opened for history do not. With the soft rule on, the same hook appends a short instruction to the system prompt, and each tool description says to use it instead of <code>gh</code> or <code>curl</code>.</p>
+<p>When an agent session opens, the plugin adds its <code>github_*</code> tools to it (Paseo exposes plugin agent tools to the agent as MCP tools). Every agent gets them; sessions opened for history do not. With the soft rule on, a short instruction is also added to the system prompt: saved when an agent is created (the only path on Paseo 0.16, marked in the agent metadata) and appended when a session opens on Paseo 0.17 or later, and each tool description says to use it instead of <code>gh</code> or <code>curl</code>.</p>
 
 <h2 id="pipeline">The pipeline of one call</h2>
 <ol class="steps">
@@ -59,7 +59,7 @@
 <ul>
 <li>The soft rule is an instruction. An agent with a shell can still run <code>gh</code>.</li>
 <li>GraphQL scoping is best effort: it checks the repository you pass and <code>owner:</code> values in the query. Queries by node ID cannot be scoped to an owner and are refused unless every owner is allowed.</li>
-<li>Changes to the soft rule apply to sessions opened afterwards.</li>
+<li>On Paseo 0.16 the soft rule only reaches agents created after it was turned on.</li>
 </ul>
 
 </main>

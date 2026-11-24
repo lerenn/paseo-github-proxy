@@ -14,20 +14,44 @@ import {
 } from "./shared/contracts";
 import { discoverOwners, discoverRepos } from "./server/discovery";
 import { createRuntime } from "./server/runtime";
-import { buildTools, SOFT_RULE_PROMPT } from "./server/tools";
+import { buildTools, SOFT_RULE_METADATA_KEY, SOFT_RULE_PROMPT, withSoftRule } from "./server/tools";
+
+const hostAppend = (request: object): string[] => {
+  const value = (request as { appendSystemPrompt?: string[] }).appendSystemPrompt;
+  return Array.isArray(value) ? value : [];
+};
 
 export default function contribute(server: PluginServerContext) {
   const rt = createRuntime();
+
+  // Paseo before 0.17 has no `appendSystemPrompt` on session open, so with the soft rule on, a new agent also gets the
+  // instruction in its saved system prompt (the way paseo-mail does) and a metadata mark. Every host: the mark keeps
+  // a host that does support `appendSystemPrompt` from adding it a second time.
+  server.addHook("agent.create.before", async ({ request }) => {
+    try {
+      if (!rt.store.get().forbidRawGithub || request.config.internal) return;
+      return {
+        ...request,
+        config: { ...request.config, systemPrompt: withSoftRule(request.config.systemPrompt) },
+        metadata: { ...request.metadata, [SOFT_RULE_METADATA_KEY]: true },
+      };
+    } catch (error) {
+      console.error("[github-proxy] could not add the soft rule to the system prompt:", error);
+      return;
+    }
+  });
 
   // Every agent gets the github_* tools; with the soft rule on, also an instruction to use them instead of gh/curl.
   // Paseo marks open sessions stale when the plugin reloads, and a changed setting applies to sessions opened afterwards.
   server.addHook("agent.open.before", async ({ request }) => {
     if (request.purpose === "history") return;
     const { forbidRawGithub } = rt.store.get();
+    // Hosts from 0.17 take per-open instructions; older ones ignore the field and rely on the saved prompt above.
+    const saved = request.metadata?.[SOFT_RULE_METADATA_KEY] === true;
     return {
       ...request,
       tools: [...request.tools, ...buildTools({ proxy: rt.proxy, softRule: forbidRawGithub })],
-      ...(forbidRawGithub ? { appendSystemPrompt: [...(request.appendSystemPrompt ?? []), SOFT_RULE_PROMPT] } : {}),
+      ...(forbidRawGithub && !saved ? { appendSystemPrompt: [...hostAppend(request), SOFT_RULE_PROMPT] } : {}),
     };
   });
 

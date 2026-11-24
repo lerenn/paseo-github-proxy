@@ -169,7 +169,7 @@ export function PolicyTab({ theme, data }: { theme: Theme; data: ConfigData }) {
           value={config.forbidRawGithub}
           onChange={(v) => data.change((c) => ({ ...c, forbidRawGithub: v }))}
           label="Forbid direct use of gh, curl and raw GitHub"
-          hint="Adds an instruction to every agent's system prompt and to each github_* tool description: use these tools instead of gh or curl. A soft rule, not a sandbox. It applies to agent sessions opened after you change it."
+          hint="Adds an instruction to every agent's system prompt and to each github_* tool description: use these tools instead of gh or curl. A soft rule, not a sandbox. It reaches agents created after you turn it on (and, on Paseo 0.17 or later, sessions opened afterwards)."
         />
         <Field
           theme={theme}
