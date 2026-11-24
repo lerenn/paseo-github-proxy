@@ -159,7 +159,7 @@ describe("issues and pull requests", () => {
 
   it("auto_merge without a queue enables auto-merge and reports it", async () => {
     const t = make(full, [node(), noQueue, ok, node({ autoMergeRequest: { mergeMethod: "SQUASH", enabledBy: { login: "bot" } } })]);
-    const r = JSON.parse((await t.run("github_pr_manage", { operation: "auto_merge", number: 3, merge_method: "squash" })).text);
+    const r = JSON.parse(((await t.run("github_pr_manage", { operation: "auto_merge", number: 3, merge_method: "squash" }))).text!);
     expect(gqlBody(t.calls[2]!).query).toContain("enablePullRequestAutoMerge");
     expect(gqlBody(t.calls[2]!).variables.input).toEqual({ pullRequestId: "PR_1", mergeMethod: "SQUASH" });
     expect(r).toEqual({ number: 3, queued: true, auto_merge: { enabled: true, method: "squash", enabled_by: "bot" }, merge_queue: { state: "NOT_QUEUED" }, merged: false });
@@ -167,7 +167,7 @@ describe("issues and pull requests", () => {
 
   it("auto_merge enqueues when the base branch has a merge queue", async () => {
     const t = make(full, [node(), hasQueue, ok, node({ isInMergeQueue: true, mergeQueueEntry: { state: "AWAITING_CHECKS", position: 2, estimatedTimeToMerge: 300 } })]);
-    const r = JSON.parse((await t.run("github_pr_manage", { operation: "auto_merge", number: 3 })).text);
+    const r = JSON.parse(((await t.run("github_pr_manage", { operation: "auto_merge", number: 3 }))).text!);
     expect(gqlBody(t.calls[2]!).query).toContain("enqueuePullRequest");
     expect(r).toMatchObject({ queued: true, merged: false, auto_merge: { enabled: false, method: null }, merge_queue: { state: "AWAITING_CHECKS", position: 2, estimated_time_to_merge: 300 } });
     expect(r.reason).toBeUndefined();
@@ -176,22 +176,22 @@ describe("issues and pull requests", () => {
   it("auto_merge says why a pull request was not queued", async () => {
     const refused = { body: { errors: [{ message: "Pull request is not mergeable" }] } };
     const t = make(full, [node(), hasQueue, refused, node({ mergeStateStatus: "BLOCKED", reviewDecision: "REVIEW_REQUIRED" })]);
-    const r = JSON.parse((await t.run("github_pr_manage", { operation: "auto_merge", number: 3 })).text);
+    const r = JSON.parse(((await t.run("github_pr_manage", { operation: "auto_merge", number: 3 }))).text!);
     expect(r).toMatchObject({ queued: false, merged: false });
     expect(r.reason).toMatch(/not mergeable/);
     const failing = { commits: { nodes: [{ commit: { statusCheckRollup: { contexts: { nodes: [{ __typename: "CheckRun", name: "build", conclusion: "FAILURE" }] } } } }] } };
     const t2 = make(full, [node(failing), hasQueue, ok, node(failing)]);
-    expect(JSON.parse((await t2.run("github_pr_manage", { operation: "auto_merge", number: 3 })).text).reason).toMatch(/failing: build/);
+    expect(JSON.parse(((await t2.run("github_pr_manage", { operation: "auto_merge", number: 3 }))).text!).reason).toMatch(/failing: build/);
     const t3 = make(full, [node({ mergeStateStatus: "DIRTY" }), hasQueue, ok, node({ mergeStateStatus: "DIRTY" })]);
-    expect(JSON.parse((await t3.run("github_pr_manage", { operation: "auto_merge", number: 3 })).text).reason).toMatch(/conflicts/);
+    expect(JSON.parse(((await t3.run("github_pr_manage", { operation: "auto_merge", number: 3 }))).text!).reason).toMatch(/conflicts/);
     const t4 = make(full, [node({ merged: true, mergedAt: "2026-01-01T00:00:00Z" })]);
-    expect(JSON.parse((await t4.run("github_pr_manage", { operation: "auto_merge", number: 3 })).text)).toMatchObject({ queued: false, merged: true });
+    expect(JSON.parse(((await t4.run("github_pr_manage", { operation: "auto_merge", number: 3 }))).text!)).toMatchObject({ queued: false, merged: true });
     expect(t4.calls).toHaveLength(1);
   });
 
   it("disable_auto_merge reports the state afterwards", async () => {
     const t = make(full, [node({ autoMergeRequest: { mergeMethod: "MERGE" } }), ok, node({ mergeStateStatus: "CLEAN" })]);
-    const r = JSON.parse((await t.run("github_pr_manage", { operation: "disable_auto_merge", number: 3 })).text);
+    const r = JSON.parse(((await t.run("github_pr_manage", { operation: "disable_auto_merge", number: 3 }))).text!);
     expect(gqlBody(t.calls[1]!).query).toContain("disablePullRequestAutoMerge");
     expect(r).toMatchObject({ queued: false, auto_merge: { enabled: false } });
   });
@@ -199,10 +199,10 @@ describe("issues and pull requests", () => {
   it("github_get_pr reports merged, auto_merge and merge_queue", async () => {
     const queued = node({ mergeQueueEntry: { state: "UNMERGEABLE", position: 1, estimatedTimeToMerge: null }, commits: { nodes: [{ commit: { statusCheckRollup: { contexts: { nodes: [{ name: "test", conclusion: "FAILURE" }, { name: "lint", conclusion: "SUCCESS" }] } } } }] } });
     const t = make({}, [{ body: { number: 3, state: "open", merged_at: null, auto_merge: { merge_method: "squash", enabled_by: { login: "me" } } } }, queued]);
-    const r = JSON.parse((await t.run("github_get_pr", { number: 3 })).text);
+    const r = JSON.parse(((await t.run("github_get_pr", { number: 3 }))).text!);
     expect(r).toMatchObject({ merged: false, auto_merge: { enabled: true, method: "squash", enabled_by: "me" }, merge_queue: { state: "UNMERGEABLE", position: 1, failing_check: ["test"] } });
     const done = make({}, [{ body: { number: 3, state: "closed", merged_at: "2026-01-01T00:00:00Z" } }]);
-    const d = JSON.parse((await done.run("github_get_pr", { number: 3 })).text);
+    const d = JSON.parse(((await done.run("github_get_pr", { number: 3 }))).text!);
     expect(d).toMatchObject({ merged: true, merged_at: "2026-01-01T00:00:00Z", auto_merge: { enabled: false } });
     expect(d.merge_queue).toBeUndefined();
     expect(done.calls).toHaveLength(1);
