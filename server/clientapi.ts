@@ -26,6 +26,7 @@ export interface ClientApiStatus {
   tokenSet: boolean;
   url: string;
   helperFound: boolean;
+  helperError: string;
   lastRequestAt: number | null;
   counters: ClientCounters;
 }
@@ -243,7 +244,7 @@ export class ClientApiServer {
   constructor(
     private readonly api: ClientApi,
     private readonly tokenSet: () => boolean,
-    private readonly helperFound: () => boolean,
+    private readonly helper: () => { found: boolean; error: string },
     private readonly log: (message: string) => void = () => undefined,
     private readonly maxBody = CLIENT_MAX_BODY_BYTES,
   ) {}
@@ -297,6 +298,7 @@ export class ClientApiServer {
   }
 
   status(): ClientApiStatus {
+    const helper = this.helper();
     return {
       enabled: this.current.enabled,
       listening: this.server?.listening ?? false,
@@ -306,7 +308,8 @@ export class ClientApiServer {
       error: this.error,
       tokenSet: this.tokenSet(),
       url: clientApiUrl(this.current),
-      helperFound: this.helperFound(),
+      helperFound: helper.found,
+      helperError: helper.error,
       lastRequestAt: this.api.lastRequestAt,
       counters: { ...this.api.counters },
     };
@@ -354,15 +357,16 @@ const shellQuote = (text: string): string => `'${text.replace(/'/g, `'\\''`)}'`;
 /**
  * The environment added to a new agent session: GH_PROXY_URL (and GH_PROXY_TOKEN), and git configuration through
  * GIT_CONFIG_COUNT / KEY_n / VALUE_n so `git fetch` and `git push` over HTTPS ask the plugin for a scoped token.
+ * The helper runs with `nodePath` (the node that runs the daemon), so no PATH is assumed.
  * Entries the session already has (an existing GIT_CONFIG_COUNT) are kept: the new ones are appended after them.
  */
-export function clientEnv(input: { config: ClientApiConfig; token: string; helperPath: string | null; existing?: Record<string, string> }): Record<string, string> {
+export function clientEnv(input: { config: ClientApiConfig; token: string; helperPath: string | null; nodePath?: string; existing?: Record<string, string> }): Record<string, string> {
   const env: Record<string, string> = { GH_PROXY_URL: clientApiUrl(input.config), GH_PROXY_TOKEN: input.token || NO_TOKEN_PLACEHOLDER };
   if (!input.helperPath) return env;
   const start = Math.max(0, Number.parseInt(input.existing?.GIT_CONFIG_COUNT ?? "0", 10) || 0);
   const entries: [string, string][] = [
     ["credential.https://github.com.helper", ""], // forget the helpers inherited from other config levels: ours answers
-    ["credential.https://github.com.helper", `!node ${shellQuote(input.helperPath)}`],
+    ["credential.https://github.com.helper", `!${shellQuote(input.nodePath ?? "node")} ${shellQuote(input.helperPath)}`],
     ["credential.https://github.com.useHttpPath", "true"],
   ];
   entries.forEach(([key, value], i) => {

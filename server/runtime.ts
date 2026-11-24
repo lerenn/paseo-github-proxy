@@ -1,12 +1,11 @@
-import { existsSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { ActivityLog } from "./activity";
 import { AppPool } from "./apps";
 import { GhCliSource, type FetchFn } from "./auth";
 import { ResponseCache } from "./cache";
 import { ClientApi, ClientApiServer } from "./clientapi";
 import { GitCredentials } from "./gitcred";
+import { installHelper, type HelperInstall } from "./helper-install";
 import { staleKeyTest } from "./events";
 import { GithubProxy } from "./proxy";
 import { RateLimitTracker } from "./ratelimit";
@@ -14,16 +13,6 @@ import { ConfigStore, dataDir } from "./store";
 import { SubscriptionStore } from "./subscriptions";
 import { WakeService, type AgentSender } from "./wakeups";
 import { WebhookReceiver, WebhookServer } from "./webhook";
-
-/** The credential helper script that ships next to this file; null when the plugin was bundled without it. */
-export function helperPath(): string | null {
-  try {
-    const file = fileURLToPath(new URL("./git-credential-helper.mjs", import.meta.url));
-    return existsSync(file) ? file : null;
-  } catch {
-    return null;
-  }
-}
 
 export const nodeFetch: FetchFn = async (url, init) => {
   const res = await fetch(url, { method: init.method, headers: init.headers, ...(init.body !== undefined ? { body: init.body } : {}), signal: AbortSignal.timeout(30_000) as never });
@@ -57,15 +46,27 @@ export function createRuntime(dir = dataDir(), fetchFn: FetchFn = nodeFetch) {
   const webhooks = new WebhookServer(receiver, () => store.webhookSecrets().length, (m) => console.error(`[github-proxy] ${m}`));
 
   const git = new GitCredentials({ proxy, apps: () => store.apps(), credentials: (id) => store.appCredentials(id), fetch: fetchFn });
+  // The helper is written to the data directory, and only when something will use it (client API and injection on).
+  let helper: HelperInstall = { path: null, error: "" };
+  const ensureHelper = (): HelperInstall => {
+    const { clientApi: c } = store.get();
+    if (c.enabled && c.injectEnv) helper = installHelper(dir);
+    return helper;
+  };
   const clientApi = new ClientApiServer(
     new ClientApi({ proxy, git, token: () => store.clientToken(), log: (m) => console.error(`[github-proxy] ${m}`) }),
     () => !!store.clientToken(),
-    () => helperPath() !== null,
+    () => {
+      const { clientApi: c } = store.get();
+      if (!c.enabled || !c.injectEnv) return { found: true, error: "" };
+      const h = ensureHelper();
+      return { found: h.path !== null, error: h.error };
+    },
     (m) => console.error(`[github-proxy] ${m}`),
   );
 
   return {
-    git, clientApi, store, cache, tracker, activity, gh, apps, proxy, subscriptions, wake, webhooks,
+    git, clientApi, ensureHelper, store, cache, tracker, activity, gh, apps, proxy, subscriptions, wake, webhooks,
     /** Remembers the SDK handle of the context a hook, tool or RPC runs in. */
     capturePaseo(handle: AgentSender | undefined): void {
       if (handle) paseo = handle;

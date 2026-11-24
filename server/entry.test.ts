@@ -63,13 +63,13 @@ describe("server entry", () => {
     await rpc(configSaveRpc, { config: { ...config, clientApi: { ...config.clientApi, enabled: true, port: 38788 } } });
     const env = (await hook({ request: request({ env: { KEEP: "1" } }) }, {})).env;
     expect(env).toMatchObject({ KEEP: "1", GH_PROXY_URL: "http://127.0.0.1:38788", GH_PROXY_TOKEN: token, GIT_CONFIG_COUNT: "3", GIT_CONFIG_KEY_2: "credential.https://github.com.useHttpPath", GIT_CONFIG_VALUE_2: "true" });
-    expect(env.GIT_CONFIG_VALUE_1).toMatch(/^!node '.*git-credential-helper\.mjs'$/);
+    expect(env.GIT_CONFIG_VALUE_1).toBe(`!'${process.execPath}' '${path.join(home, "plugin-data", "lerenn", "paseo-github-proxy", "git-credential-helper.mjs")}'`);
     expect(await hook({ request: request({ purpose: "history" }) }, {})).toBeUndefined();
     // the injection is its own switch
     await rpc(configSaveRpc, { config: { ...config, clientApi: { ...config.clientApi, enabled: true, port: 38788, injectEnv: false } } });
     expect((await hook({ request: request() }, {})).env).toEqual({});
     const status = await rpc(clientApiStatusRpc);
-    expect(status).toMatchObject({ enabled: true, listening: true, port: 38788, loopback: true, tokenSet: true, helperFound: true });
+    expect(status).toMatchObject({ enabled: true, listening: true, port: 38788, loopback: true, tokenSet: true, helperFound: true, helperError: "" });
     // the token is in the 0600 secrets file only, never in config.json or a status answer
     const dir = path.join(home, "plugin-data", "lerenn", "paseo-github-proxy");
     expect(statSync(path.join(dir, "secrets.json")).mode & 0o777).toBe(0o600);
