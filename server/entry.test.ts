@@ -12,9 +12,13 @@ let home: string;
 beforeEach(() => {
   home = mkdtempSync(path.join(tmpdir(), "ghp-home-"));
   process.env.PASEO_HOME = home;
+  process.env.GIT_CONFIG_GLOBAL = "/dev/null"; // no fallbacks from the machine running the tests
+  process.env.GIT_CONFIG_SYSTEM = "/dev/null";
 });
 afterEach(() => {
   delete process.env.PASEO_HOME;
+  delete process.env.GIT_CONFIG_GLOBAL;
+  delete process.env.GIT_CONFIG_SYSTEM;
   rmSync(home, { recursive: true, force: true });
 });
 
@@ -66,16 +70,15 @@ describe("server entry", () => {
     expect(alone).toMatchObject({ KEEP: "1", GH_PROXY_URL: "http://127.0.0.1:38788", GH_PROXY_TOKEN: token, GIT_CONFIG_COUNT: "1" });
     expect(Object.keys(alone).filter((k) => k.startsWith("GIT_CONFIG_KEY"))).toEqual([]);
     expect(await rpc(clientApiStatusRpc)).toMatchObject({ helperFound: true, gitAvailable: false });
-    // an App serves: the helper is appended after the session's own entries, with no empty-value reset
+    // an App serves: the helper list is reset, then ours comes first, after the session's own entries
     const { generateKeyPairSync } = await import("node:crypto");
     const pem = generateKeyPairSync("rsa", { modulusLength: 2048, privateKeyEncoding: { type: "pkcs8", format: "pem" }, publicKeyEncoding: { type: "spki", format: "pem" } }).privateKey;
     await rpc(appCredentialsSaveRpc, { organization: "Org", appId: "1", installationId: "2", owners: ["acme"], privateKey: pem });
     const env = (await hook({ request: request({ env: { KEEP: "1" } }) }, {})).env;
-    expect(env).toMatchObject({ KEEP: "1", GH_PROXY_URL: "http://127.0.0.1:38788", GH_PROXY_TOKEN: token, GIT_CONFIG_COUNT: "2", GIT_CONFIG_KEY_1: "credential.https://github.com.useHttpPath", GIT_CONFIG_VALUE_1: "true" });
-    expect(env.GIT_CONFIG_VALUE_0).toBe(`!'${process.execPath}' '${path.join(home, "plugin-data", "lerenn", "paseo-github-proxy", "git-credential-helper.mjs")}'`);
-    expect(Object.values(env)).not.toContain("");
-    const appended = (await hook({ request: request({ env: { GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "a.b", GIT_CONFIG_VALUE_0: "c" } }) }, {})).env;
-    expect(appended).toMatchObject({ GIT_CONFIG_COUNT: "3", GIT_CONFIG_KEY_0: "a.b", GIT_CONFIG_VALUE_0: "c", GIT_CONFIG_KEY_1: "credential.https://github.com.helper" });
+    expect(env).toMatchObject({ KEEP: "1", GH_PROXY_URL: "http://127.0.0.1:38788", GH_PROXY_TOKEN: token, GIT_CONFIG_COUNT: "3", GIT_CONFIG_KEY_0: "credential.https://github.com.helper", GIT_CONFIG_VALUE_0: "", GIT_CONFIG_KEY_2: "credential.https://github.com.useHttpPath", GIT_CONFIG_VALUE_2: "true" });
+    expect(env.GIT_CONFIG_VALUE_1).toBe(`!'${process.execPath}' '${path.join(home, "plugin-data", "lerenn", "paseo-github-proxy", "git-credential-helper.mjs")}'`);
+        const appended = (await hook({ request: request({ env: { GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "a.b", GIT_CONFIG_VALUE_0: "c" } }) }, {})).env;
+    expect(appended).toMatchObject({ GIT_CONFIG_COUNT: "4", GIT_CONFIG_KEY_0: "a.b", GIT_CONFIG_VALUE_0: "c", GIT_CONFIG_KEY_1: "credential.https://github.com.helper", GIT_CONFIG_VALUE_1: "" });
     expect(await hook({ request: request({ purpose: "history" }) }, {})).toBeUndefined();
     // the injection is its own switch
     await rpc(configSaveRpc, { config: { ...config, clientApi: { ...config.clientApi, enabled: true, port: 38788, injectEnv: false } } });
