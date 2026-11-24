@@ -4,7 +4,7 @@ import { defaultConfig, presetPolicy, type AppEntry, type Config } from "../shar
 import { ActivityLog } from "./activity";
 import type { FetchFn, TokenSource } from "./auth";
 import { ResponseCache } from "./cache";
-import { ClientApi, ClientApiServer, clientApiUrl, clientEnv, NO_TOKEN_PLACEHOLDER } from "./clientapi";
+import { ClientApi, ClientApiServer, clientApiUrl, clientEnv, gitCredentialsAvailable, NO_TOKEN_PLACEHOLDER } from "./clientapi";
 import { GitCredentials } from "./gitcred";
 import { GithubProxy } from "./proxy";
 import { RateLimitTracker } from "./ratelimit";
@@ -290,27 +290,36 @@ describe("listeners", () => {
 
 describe("environment injection", () => {
   const config = { enabled: true, port: 8788, bind: "127.0.0.1", injectEnv: true };
-  it("sets the proxy URL, the token and the git configuration", () => {
+  it("sets the proxy URL, the token and the git configuration, with no helper reset", () => {
     const env = clientEnv({ config, token: "tok", helperPath: "/data/git-credential-helper.mjs", nodePath: "/usr/lib/node/bin/node" });
     expect(env).toEqual({
       GH_PROXY_URL: "http://127.0.0.1:8788",
       GH_PROXY_TOKEN: "tok",
-      GIT_CONFIG_COUNT: "3",
+      GIT_CONFIG_COUNT: "2",
       GIT_CONFIG_KEY_0: "credential.https://github.com.helper",
-      GIT_CONFIG_VALUE_0: "",
-      GIT_CONFIG_KEY_1: "credential.https://github.com.helper",
-      GIT_CONFIG_VALUE_1: "!'/usr/lib/node/bin/node' '/data/git-credential-helper.mjs'",
-      GIT_CONFIG_KEY_2: "credential.https://github.com.useHttpPath",
-      GIT_CONFIG_VALUE_2: "true",
+      GIT_CONFIG_VALUE_0: "!'/usr/lib/node/bin/node' '/data/git-credential-helper.mjs'",
+      GIT_CONFIG_KEY_1: "credential.https://github.com.useHttpPath",
+      GIT_CONFIG_VALUE_1: "true",
     });
+    const helpers = Object.entries(env).filter(([k]) => k.startsWith("GIT_CONFIG_VALUE_")).map(([, v]) => v);
+    expect(helpers).not.toContain("");
   });
   it("uses a placeholder token the shim accepts, appends to existing git config and quotes the path", () => {
     const env = clientEnv({ config, token: "", helperPath: "/home/o'neil/x y.mjs", existing: { GIT_CONFIG_COUNT: "2" } });
     expect(env.GH_PROXY_TOKEN).toBe(NO_TOKEN_PLACEHOLDER);
-    expect(env.GIT_CONFIG_COUNT).toBe("5");
-    expect(env.GIT_CONFIG_KEY_2).toBe("credential.https://github.com.helper");
+    expect(env.GIT_CONFIG_COUNT).toBe("4");
     expect(env.GIT_CONFIG_KEY_0).toBeUndefined();
-    expect(env.GIT_CONFIG_VALUE_3).toBe(`!'node' '/home/o'\\''neil/x y.mjs'`);
+    expect(env.GIT_CONFIG_KEY_2).toBe("credential.https://github.com.helper");
+    expect(env.GIT_CONFIG_VALUE_2).toBe(`!'node' '/home/o'\\''neil/x y.mjs'`);
+    expect(env.GIT_CONFIG_KEY_3).toBe("credential.https://github.com.useHttpPath");
+  });
+  it("leaves existing GIT_CONFIG_COUNT untouched when git is skipped", () => {
+    const env = clientEnv({ config, token: "t", helperPath: null, existing: { GIT_CONFIG_COUNT: "2" } });
+    expect(env.GIT_CONFIG_COUNT).toBeUndefined();
+  });
+  it("git needs a GitHub App: none configured means git is skipped", () => {
+    expect(gitCredentialsAvailable([])).toBe(false);
+    expect(gitCredentialsAvailable([{ id: "a" }])).toBe(true);
   });
   it("skips git when the helper script is missing, and maps a wildcard bind to loopback", () => {
     const env = clientEnv({ config: { ...config, bind: "0.0.0.0" }, token: "", helperPath: null });

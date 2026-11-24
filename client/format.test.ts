@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { behaviourWarnings, SOURCE_OPTIONS, visibleSources, appSummary, toggleOpen, countdown, percent, presetOf, rejectedBreakdown, splitList, summarize, toggleChecked, withAlpha } from "./format";
+import { behaviourWarnings, gitLeftAlone, SOURCE_OPTIONS, visibleSources, appSummary, toggleOpen, countdown, percent, presetOf, rejectedBreakdown, splitList, summarize, toggleChecked, withAlpha } from "./format";
 
 describe("rejectedBreakdown", () => {
   it("lists the reasons", () => {
@@ -73,5 +73,15 @@ describe("behaviourWarnings", () => {
       const expected = !forbid && !block ? [] : !enabled ? ["clientApiOff"] : inject ? [] : ["clientApiNoInject"];
       expect(behaviourWarnings(cfg(forbid, block, enabled, inject))).toEqual(expected);
     }
+  });
+});
+
+describe("gitLeftAlone", () => {
+  it("shows the note only when the setup is on, the helper is in place and no App could issue a token", () => {
+    expect(gitLeftAlone(true, { helperFound: true, gitAvailable: false })).toBe(true);
+    expect(gitLeftAlone(true, { helperFound: true, gitAvailable: true })).toBe(false);
+    expect(gitLeftAlone(false, { helperFound: true, gitAvailable: false })).toBe(false);
+    expect(gitLeftAlone(true, { helperFound: false, gitAvailable: false })).toBe(false);
+    expect(gitLeftAlone(true, null)).toBe(false);
   });
 });

@@ -3,7 +3,7 @@ import { ActivityLog } from "./activity";
 import { AppPool } from "./apps";
 import { GhCliSource, type FetchFn } from "./auth";
 import { ResponseCache } from "./cache";
-import { ClientApi, ClientApiServer } from "./clientapi";
+import { ClientApi, ClientApiServer, gitCredentialsAvailable } from "./clientapi";
 import { GitCredentials } from "./gitcred";
 import { installHelper, type HelperInstall } from "./helper-install";
 import { staleKeyTest } from "./events";
@@ -60,7 +60,7 @@ export function createRuntime(dir = dataDir(), fetchFn: FetchFn = nodeFetch) {
       const { clientApi: c } = store.get();
       if (!c.enabled || !c.injectEnv) return { found: true, error: "" };
       const h = ensureHelper();
-      return { found: h.path !== null, error: h.error };
+      return { found: h.path !== null, error: h.error, gitAvailable: gitCredentialsAvailable(store.apps()) };
     },
     (m) => console.error(`[github-proxy] ${m}`),
   );
