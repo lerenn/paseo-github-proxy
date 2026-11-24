@@ -172,6 +172,8 @@ Tools with an `operation` input group related commands so the tool list stays sh
 | user profile, `auth status` (who am I) | `github_account` user, me (`read`) | added | |
 | `status` | `github_account` notifications (`read`) | added | |
 | (no `gh` equivalent) wake an agent on an event | `github_subscribe` (`subscribe_events`) | added | needs the webhook listener |
+| `pr checks --watch`, `run watch` (a PR, a commit sha, main CI, a tag build) | `github_subscribe` checks_completed with `pr`, `sha`, `branch`, `tag`, `workflow`, `conclusion` | added | push model, not a poll; `ttl_hours` up to 168 |
+| wait for a push, a release, a merged queue group, auto-merge, a comment mentioning a handle | `github_subscribe` push, release_published, merge_queue_destroyed, pr_auto_merge, comment_added with `mentions` | added | `merge_group` needs a merge queue |
 | mark notifications read | `github_account` mark_read (`manage_notifications`) | added | |
 
 ## gh api and the rest

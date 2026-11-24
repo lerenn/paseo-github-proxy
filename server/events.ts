@@ -3,7 +3,19 @@
  * events an agent can wait for, a small normalized event. Payload fields are untrusted text: titles are cut short.
  */
 
-export const WAKE_KINDS = ["checks_completed", "review_submitted", "comment_added", "pr_opened", "pr_merged", "pr_closed"] as const;
+export const WAKE_KINDS = [
+  "checks_completed",
+  "review_submitted",
+  "comment_added",
+  "pr_opened",
+  "pr_merged",
+  "pr_closed",
+  "pr_auto_merge",
+  "merge_queue_checks_requested",
+  "merge_queue_destroyed",
+  "push",
+  "release_published",
+] as const;
 export type WakeKind = (typeof WAKE_KINDS)[number];
 
 export const WAKE_KIND_INFO: Record<WakeKind, string> = {
@@ -13,7 +25,14 @@ export const WAKE_KIND_INFO: Record<WakeKind, string> = {
   pr_opened: "A pull request was opened or reopened.",
   pr_merged: "A pull request was merged.",
   pr_closed: "A pull request was closed without being merged.",
+  pr_auto_merge: "Auto-merge was enabled or disabled on a pull request (conclusion: enabled, disabled).",
+  merge_queue_checks_requested: "A merge queue group was created and its checks were requested (the pull request numbers come from the queue branch).",
+  merge_queue_destroyed: "A merge queue group was destroyed (conclusion is the reason: merged, invalidated, dequeued).",
+  push: "A branch or tag was pushed (not deleted). Filter with branch or tag; the commit is the new head.",
+  release_published: "A release was published (tag is the release tag).",
 };
+
+export { WEBHOOK_EVENTS, WEBHOOK_EVENTS_CACHE_ONLY } from "../shared/config";
 
 export interface WakeEvent {
   kind: WakeKind;
@@ -27,6 +46,14 @@ export interface WakeEvent {
   conclusion: string;
   /** Untrusted short text (PR title, check name), single line and truncated. */
   title: string;
+  /** Branch or tag names the event is about (a status can be on several branches). Empty when unknown. */
+  refs: string[];
+  /** `branch` or `tag` when the payload says which; empty when it does not (a workflow run only names the ref). */
+  refType: "branch" | "tag" | "";
+  /** Workflow, check run or status context name (untrusted, truncated), for the workflow filter. */
+  workflow: string;
+  /** Lower-cased comment or review text, capped. Only for matching the mentions filter; never put in a prompt. */
+  text: string;
   actor: string;
   url: string;
 }
@@ -59,6 +86,13 @@ export function eventOwner(payload: unknown): string {
 const PR = ["/pulls", "/issues", "/commits"];
 const CHECKS = ["/commits", "/check-runs", "/check-suites", "/actions", "/statuses", "/pulls"];
 
+const MAX_TEXT = 20_000;
+const stripRef = (ref: string): { name: string; type: "branch" | "tag" | "" } => {
+  if (ref.startsWith("refs/tags/")) return { name: ref.slice(10), type: "tag" };
+  if (ref.startsWith("refs/heads/")) return { name: ref.slice(11), type: "branch" };
+  return { name: ref, type: "" };
+};
+
 const numbersOf = (list: unknown): number[] => (Array.isArray(list) ? list.map((x) => Number(asRecord(x).number)).filter((n) => Number.isInteger(n) && n > 0) : []);
 
 /** Parses one verified delivery. Null means an event the plugin does not use (it is ignored). */
@@ -68,8 +102,15 @@ export function parseEvent(name: string, payloadIn: unknown): Parsed | null {
   if (!/^[^/\s]+\/[^/\s]+$/.test(repo)) return null;
   const action = str(p.action);
   const actor = shorten(asRecord(p.sender).login, 39);
-  const make = (kind: WakeKind, f: { numbers?: number[]; sha?: string; conclusion?: string; title?: unknown; url?: unknown }): WakeEvent => ({
+  const make = (
+    kind: WakeKind,
+    f: { numbers?: number[]; sha?: string; conclusion?: string; title?: unknown; url?: unknown; refs?: unknown[]; refType?: "branch" | "tag" | ""; workflow?: unknown; text?: unknown },
+  ): WakeEvent => ({
     kind, repo, numbers: f.numbers ?? [], sha: (f.sha ?? "").toLowerCase(), conclusion: (f.conclusion ?? "").toLowerCase(), title: shorten(f.title), actor, url: str(f.url),
+    refs: (f.refs ?? []).map((r) => shorten(r, 200)).filter(Boolean).slice(0, 10),
+    refType: f.refType ?? "",
+    workflow: shorten(f.workflow),
+    text: str(f.text).slice(0, MAX_TEXT).toLowerCase(),
   });
   const done = (scopes: string[], numbers: number[], wake: WakeEvent | null): Parsed => ({ repo, scopes, numbers, wake });
 
@@ -78,54 +119,80 @@ export function parseEvent(name: string, payloadIn: unknown): Parsed | null {
       const pr = asRecord(p.pull_request);
       const n = Number(pr.number ?? p.number);
       const numbers = Number.isInteger(n) ? [n] : [];
-      const base = { numbers, sha: str(asRecord(pr.head).sha), title: pr.title, url: pr.html_url };
-      const wake = action === "opened" || action === "reopened" ? make("pr_opened", base) : action === "closed" ? make(pr.merged === true ? "pr_merged" : "pr_closed", base) : null;
+      const base = { numbers, sha: str(asRecord(pr.head).sha), title: pr.title, url: pr.html_url, refs: [asRecord(pr.base).ref], refType: "branch" as const };
+      let wake: WakeEvent | null = null;
+      if (action === "opened" || action === "reopened") wake = make("pr_opened", base);
+      else if (action === "closed") wake = make(pr.merged === true ? "pr_merged" : "pr_closed", base);
+      else if (action === "auto_merge_enabled" || action === "auto_merge_disabled") wake = make("pr_auto_merge", { ...base, conclusion: action === "auto_merge_enabled" ? "enabled" : "disabled" });
       return done(["/pulls", "/issues", "/commits", "/branches", "/git", "/compare", "/check-runs", "/actions"], numbers, wake);
     }
     case "pull_request_review": {
       const pr = asRecord(p.pull_request);
       const numbers = numbersOf([pr]);
       const review = asRecord(p.review);
-      const wake = action === "submitted" ? make("review_submitted", { numbers, sha: str(review.commit_id), conclusion: str(review.state), title: pr.title, url: review.html_url }) : null;
+      const wake = action === "submitted" ? make("review_submitted", { numbers, sha: str(review.commit_id), conclusion: str(review.state), title: pr.title, url: review.html_url, text: review.body }) : null;
       return done(PR, numbers, wake);
     }
     case "pull_request_review_comment":
     case "pull_request_review_thread": {
       const pr = asRecord(p.pull_request);
       const numbers = numbersOf([pr]);
-      const wake = name === "pull_request_review_comment" && action === "created" ? make("comment_added", { numbers, sha: str(asRecord(p.comment).commit_id), title: pr.title, url: asRecord(p.comment).html_url }) : null;
+      const wake = name === "pull_request_review_comment" && action === "created" ? make("comment_added", { numbers, sha: str(asRecord(p.comment).commit_id), title: pr.title, url: asRecord(p.comment).html_url, text: asRecord(p.comment).body }) : null;
       return done(PR, numbers, wake);
     }
     case "issue_comment": {
       const issue = asRecord(p.issue);
       const numbers = numbersOf([issue]);
-      const wake = action === "created" ? make("comment_added", { numbers, title: issue.title, url: asRecord(p.comment).html_url }) : null;
+      const wake = action === "created" ? make("comment_added", { numbers, title: issue.title, url: asRecord(p.comment).html_url, text: asRecord(p.comment).body }) : null;
       return done(["/issues", "/pulls"], numbers, wake);
     }
     case "issues":
       return done(["/issues"], numbersOf([p.issue]), null);
     case "check_run": {
       const run = asRecord(p.check_run);
-      const wake = action === "completed" ? make("checks_completed", { numbers: numbersOf(run.pull_requests), sha: str(run.head_sha), conclusion: str(run.conclusion), title: run.name, url: run.html_url }) : null;
-      return done(CHECKS, numbersOf(run.pull_requests), wake);
+      const numbers = numbersOf(run.pull_requests);
+      const wake = action === "completed" ? make("checks_completed", { numbers, sha: str(run.head_sha), conclusion: str(run.conclusion), title: run.name, workflow: run.name, refs: [asRecord(run.check_suite).head_branch], url: run.html_url }) : null;
+      return done(CHECKS, numbers, wake);
     }
     case "check_suite": {
       const suite = asRecord(p.check_suite);
-      const wake = action === "completed" ? make("checks_completed", { numbers: numbersOf(suite.pull_requests), sha: str(suite.head_sha), conclusion: str(suite.conclusion), title: asRecord(suite.app).name, url: suite.url }) : null;
-      return done(CHECKS, numbersOf(suite.pull_requests), wake);
+      const numbers = numbersOf(suite.pull_requests);
+      const wake = action === "completed" ? make("checks_completed", { numbers, sha: str(suite.head_sha), conclusion: str(suite.conclusion), title: asRecord(suite.app).name, workflow: asRecord(suite.app).name, refs: [suite.head_branch], url: suite.url }) : null;
+      return done(CHECKS, numbers, wake);
     }
     case "workflow_run": {
       const run = asRecord(p.workflow_run);
-      const wake = action === "completed" ? make("checks_completed", { numbers: numbersOf(run.pull_requests), sha: str(run.head_sha), conclusion: str(run.conclusion), title: run.name, url: run.html_url }) : null;
-      return done(CHECKS, numbersOf(run.pull_requests), wake);
+      const numbers = numbersOf(run.pull_requests);
+      const wake = action === "completed" ? make("checks_completed", { numbers, sha: str(run.head_sha), conclusion: str(run.conclusion), title: run.name, workflow: run.name, refs: [run.head_branch], url: run.html_url }) : null;
+      return done(CHECKS, numbers, wake);
     }
     case "status": {
       const state = str(p.state);
-      const wake = state && state !== "pending" ? make("checks_completed", { sha: str(p.sha), conclusion: state === "error" ? "failure" : state, title: p.context, url: p.target_url }) : null;
+      const branches = Array.isArray(p.branches) ? p.branches.map((b) => asRecord(b).name) : [];
+      const wake = state && state !== "pending" ? make("checks_completed", { sha: str(p.sha), conclusion: state === "error" ? "failure" : state, title: p.context, workflow: p.context, refs: branches, url: p.target_url }) : null;
       return done(CHECKS, [], wake);
     }
-    case "push":
-      return done([""], [], null);
+    case "merge_group": {
+      const group = asRecord(p.merge_group);
+      const head = str(group.head_ref);
+      // The queue branch is `gh-readonly-queue/<base>/pr-<n>-<sha>`; a group of several pull requests has several of them.
+      const pr = /\/pr-(\d+)-/.exec(head);
+      const numbers = pr ? [Number(pr[1])] : [];
+      const base = { numbers, sha: str(group.head_sha), refs: [stripRef(str(group.base_ref)).name], refType: "branch" as const, title: head.replace(/^refs\/heads\//, "") };
+      const wake =
+        action === "checks_requested" ? make("merge_queue_checks_requested", base) : action === "destroyed" ? make("merge_queue_destroyed", { ...base, conclusion: str(p.reason) }) : null;
+      return done(["/pulls", "/commits", "/branches", "/git", "/check-runs", "/check-suites", "/actions", "/statuses"], numbers, wake);
+    }
+    case "release": {
+      const release = asRecord(p.release);
+      const wake = action === "published" ? make("release_published", { sha: str(release.target_commitish).match(/^[0-9a-f]{7,40}$/i) ? str(release.target_commitish) : "", refs: [release.tag_name], refType: "tag", title: release.name || release.tag_name, url: release.html_url }) : null;
+      return done(["/releases", "/tags", "/git"], [], wake);
+    }
+    case "push": {
+      const ref = stripRef(str(p.ref));
+      const wake = p.deleted === true || !ref.name ? null : make("push", { sha: str(p.after), refs: [ref.name], refType: ref.type, title: asRecord(p.head_commit).message, url: p.compare });
+      return done([""], [], wake);
+    }
     default:
       return null;
   }

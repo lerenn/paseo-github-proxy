@@ -5,6 +5,7 @@ import { WAKE_KINDS, type WakeEvent } from "./events";
 
 export const DEFAULT_TTL_MINUTES = 360; // 6 hours
 export const MAX_TTL_MINUTES = 10_080; // 7 days
+export const MAX_TTL_HOURS = MAX_TTL_MINUTES / 60;
 export const MAX_PER_AGENT = 20;
 export const MAX_TOTAL = 200;
 
@@ -20,6 +21,14 @@ export const subscriptionSchema = z.object({
   events: z.array(z.enum(WAKE_KINDS)).min(1),
   /** Only for these conclusions (check conclusion, review state). Empty: any. */
   conclusions: z.array(z.string()).default([]),
+  /** A branch name (a trailing `*` is a prefix match). Applies to every event that names refs (checks, push, merge queue, PR base). */
+  branch: z.string().default(""),
+  /** A tag name (a trailing `*` is a prefix match), for push, release and tag-triggered workflow runs. */
+  tag: z.string().default(""),
+  /** A workflow, check run or status context name, case-insensitive, exact. */
+  workflow: z.string().default(""),
+  /** Wake only on a comment or review that contains one of these (case-insensitive), matched against the payload only. */
+  mentions: z.array(z.string()).default([]),
   /** A persistent subscription survives its first match; the default one-shot is removed when it fires. */
   persistent: z.boolean().default(false),
   createdAt: z.number(),
@@ -37,16 +46,32 @@ export interface NewSubscription {
   sha?: string | undefined;
   events: Subscription["events"];
   conclusions?: string[] | undefined;
+  branch?: string | undefined;
+  tag?: string | undefined;
+  workflow?: string | undefined;
+  mentions?: string[] | undefined;
   persistent?: boolean | undefined;
   ttlMinutes?: number | undefined;
 }
 
 const sameSha = (a: string, b: string): boolean => a.length >= 7 && b.length >= 7 && (a.startsWith(b) || b.startsWith(a));
 
-/** Whether a subscription wants an event. Expiry is the store's job. */
+/** `main` or `refs/heads/main` to `main`; the part after `refs/tags/` for tags. */
+export const bareRef = (ref: string): string => ref.trim().replace(/^refs\/(heads|tags)\//, "");
+
+const refEquals = (want: string, got: string): boolean => (want.endsWith("*") ? got.startsWith(want.slice(0, -1)) : want === got);
+
+/**
+ * Whether a subscription wants an event. Expiry is the store's job. Repository, kind, conclusion, branch, tag, workflow
+ * and mentions must all match; pr and sha together are an either-or (an event for that pull request or that commit).
+ */
 export function matches(sub: Subscription, ev: WakeEvent): boolean {
   if (sub.repo !== ev.repo || !sub.events.includes(ev.kind)) return false;
   if (sub.conclusions.length > 0 && !sub.conclusions.includes(ev.conclusion)) return false;
+  if (sub.branch && (ev.refType === "tag" || !ev.refs.some((r) => refEquals(sub.branch, r)))) return false;
+  if (sub.tag && (ev.refType === "branch" || !ev.refs.some((r) => refEquals(sub.tag, r)))) return false;
+  if (sub.workflow && sub.workflow.toLowerCase() !== ev.workflow.toLowerCase()) return false;
+  if (sub.mentions.length > 0 && !sub.mentions.some((m) => ev.text.includes(m.toLowerCase()))) return false;
   if (sub.number === null && !sub.sha) return true;
   return (sub.number !== null && ev.numbers.includes(sub.number)) || (!!sub.sha && sameSha(sub.sha.toLowerCase(), ev.sha));
 }
@@ -118,6 +143,10 @@ export class SubscriptionStore {
       sha: (input.sha ?? "").toLowerCase(),
       events: [...new Set(input.events)],
       conclusions: [...new Set((input.conclusions ?? []).map((c) => c.toLowerCase()))],
+      branch: bareRef(input.branch ?? ""),
+      tag: bareRef(input.tag ?? ""),
+      workflow: (input.workflow ?? "").trim(),
+      mentions: [...new Set((input.mentions ?? []).map((m) => m.trim()).filter(Boolean))],
       persistent: input.persistent ?? false,
       createdAt: now,
       expiresAt: now + ttl * 60_000,

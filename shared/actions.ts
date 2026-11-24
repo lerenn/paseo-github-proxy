@@ -50,7 +50,7 @@ export const ACTION_INFO: Record<Action, { label: string; hint: string; risk: "s
   manage_gists: { label: "Manage gists", hint: "Create, edit and delete gists.", risk: "low" },
   manage_notifications: { label: "Manage notifications", hint: "Mark notifications as read or done.", risk: "low" },
   manage_project: { label: "Manage projects", hint: "Add items to GitHub Projects and change their field values.", risk: "low" },
-  subscribe_events: { label: "Subscribe to events", hint: "Ask to be woken by a GitHub event (checks done, review, comment, merge) on a repository, with github_subscribe. Needs the webhook listener. Reads nothing and changes nothing on GitHub.", risk: "low" },
+  subscribe_events: { label: "Subscribe to events", hint: "Ask to be woken by a GitHub event (checks done, review, comment, merge, push, release, merge queue) on a repository, with github_subscribe. Needs the webhook listener. Reads nothing and changes nothing on GitHub.", risk: "low" },
   generic_api_read: { label: "Generic API (read)", hint: "github_api GET requests and GraphQL queries.", risk: "low" },
   generic_api_write: { label: "Generic API (write)", hint: "github_api writes: any non-GET REST call and GraphQL mutations.", risk: "high" },
 };

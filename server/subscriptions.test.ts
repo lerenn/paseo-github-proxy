@@ -15,7 +15,7 @@ import { wakePrompt, WakeService, type AgentSender } from "./wakeups";
 
 const dirs: string[] = [];
 afterEach(() => dirs.splice(0).forEach((d) => rmSync(d, { recursive: true, force: true })));
-const ev = (extra: Partial<WakeEvent> = {}): WakeEvent => ({ kind: "checks_completed", repo: "acme/web", numbers: [5], sha: "abcdef123456", conclusion: "success", title: "CI", actor: "bob", url: "", ...extra });
+const ev = (extra: Partial<WakeEvent> = {}): WakeEvent => ({ kind: "checks_completed", repo: "acme/web", numbers: [5], sha: "abcdef123456", conclusion: "success", title: "CI", actor: "bob", url: "", refs: [], refType: "", workflow: "", text: "", ...extra });
 const base = { agentId: "a1", agentTitle: "A", repo: "Acme/Web", events: ["checks_completed" as const] };
 
 describe("SubscriptionStore", () => {

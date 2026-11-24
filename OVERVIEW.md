@@ -22,7 +22,7 @@ A second, optional setting (the hard rule) denies permission requests for shell 
 
 ## Webhooks and wake-ups
 
-Optional and off by default. Turn on the webhook listener in Auth, give each GitHub App a generated webhook secret, and point GitHub at it through a public URL that you provide (a tunnel or reverse proxy such as cloudflared). Verified events refresh the cache at once, and agents can ask to be woken when checks finish, a review or comment arrives, or a pull request is merged or closed (`github_subscribe`, policy action Subscribe to events, off in the read-only preset).
+Optional and off by default. Turn on the webhook listener in Auth, give each GitHub App a generated webhook secret, and point GitHub at it through a public URL that you provide (a tunnel or reverse proxy such as cloudflared). Subscribe the App to the check_run, check_suite, issue_comment, merge_group, pull_request, pull_request_review, pull_request_review_comment, push, release, status and workflow_run events. Verified events refresh the cache at once, and agents can ask to be woken when checks finish (on a pull request, a commit, a branch or a tag), a review or comment arrives (optionally mentioning a handle), a pull request or merge queue group is merged or closed, a branch or tag is pushed or a release is published (`github_subscribe`, policy action Subscribe to events, off in the read-only preset).
 
 ## Good to know
 
