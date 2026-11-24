@@ -9,7 +9,7 @@ import { RateLimitTracker } from "./ratelimit";
 type Reply = { status: number; headers?: Record<string, string>; body?: unknown };
 const ctx = { agentId: "a1", agentTitle: "Agent", tool: "github_api" };
 
-const app = (id: string, owners: string[] = [], isDefault = false): AppEntry => ({ id, label: `App ${id}`, appId: `1${id.length}`, installationId: "9", owners, default: isDefault });
+const app = (id: string, owners: string[] = [], isDefault = false): AppEntry => ({ id, organization: "", label: `App ${id}`, appId: `1${id.length}`, installationId: "9", owners, default: isDefault });
 
 function setup(configPatch: Partial<Config> = {}, replies: Reply[] = [], apps: AppEntry[] = [app("app", [], true)]) {
   let now = 1_000_000;
@@ -201,6 +201,16 @@ describe("GithubProxy with several GitHub Apps", () => {
     expect(auth(t)).toEqual(["Bearer tok-org", "Bearer tok-me", "Bearer tok-rest"]);
     expect(a).toMatchObject({ source: "app", app: "App org" });
     expect(t.activity.list().map((e) => e.app)).toEqual(["App rest", "App me", "App org"]);
+  });
+
+  it("routes by the organization and the also-serves list, case-insensitively", async () => {
+    const own: AppEntry[] = [{ ...app("one"), organization: "Acme", owners: ["partner"] }, { ...app("two"), organization: "me" }];
+    const t = setup({ activeSource: "app", allowedOwners: ["*"] }, [ok(), ok(), ok()], own);
+    await t.proxy.rest(ctx, { method: "GET", path: "/repos/acme/x" });
+    await t.proxy.rest(ctx, { method: "GET", path: "/repos/partner/y" });
+    await t.proxy.rest(ctx, { method: "GET", path: "/repos/ME/z" });
+    expect(auth(t)).toEqual(["Bearer tok-one", "Bearer tok-one", "Bearer tok-two"]);
+    expect(t.proxy.overview().sources.find((s) => s.key === "app:one")).toMatchObject({ label: "Acme", owners: ["acme", "partner"] });
   });
 
   it("checks the owner allowlist before choosing an App", async () => {
