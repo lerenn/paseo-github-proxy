@@ -34,4 +34,6 @@ A significant decision (architecture, how the plugin talks to Paseo, a new UI su
 
 ## Listing
 
+Listing images (`assets/card.png`, `assets/github-proxy-*.png`, `assets/icon.png`) are generated from `assets/card.svg` and `listing/*.html` with `node .github/scripts/render-assets.mjs` (see `assets/README.md`). Demo data only, never real names.
+
 `OVERVIEW.md` is the listing page: plain facts, no install commands, no em dashes. To publish a release to paseo.sh/plugins use the `update-official-plugin` skill.

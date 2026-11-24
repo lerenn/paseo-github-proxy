@@ -83,6 +83,8 @@ Changes since <listed-tag>:
 Supersedes #<n> (<tag>), which I am closing. <only if step 3 found some>
 ```
 
+For a first submission the manifest's `media` (first image = card thumbnail, PNG/JPG/WebP/GIF, not SVG) and `translations` (`fr`, `zh-CN`) must already be on the tag; check them with `git show <tag>:paseo-plugin.json`.
+
 Keep the categories as in the current record (`plugins/lerenn/github-proxy.json`). For a first submission, confirm them with the user; `Git` is the default guess.
 Write the permissions note from the actual diff; the reviewer checks it against the artifact.
 
