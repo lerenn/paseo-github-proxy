@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countdown, percent, presetOf, splitList, withAlpha } from "./format";
+import { countdown, percent, presetOf, splitList, summarize, toggleChecked, withAlpha } from "./format";
 
 describe("format", () => {
   it("counts down", () => {
@@ -19,5 +19,19 @@ describe("format", () => {
     const presets = { read_only: ["read", "generic_api_read"], full: ["read", "merge"] };
     expect(presetOf(["generic_api_read", "read"], presets)).toBe("read_only");
     expect(presetOf(["read"], presets)).toBe("custom");
+  });
+  it("toggles checkable values with an exclusive one", () => {
+    expect(toggleChecked(["a"], "b")).toEqual(["a", "b"]);
+    expect(toggleChecked(["a", "b"], "a")).toEqual(["b"]);
+    expect(toggleChecked(["a", "b"], "*", "*")).toEqual(["*"]);
+    expect(toggleChecked(["*"], "a", "*")).toEqual(["a"]);
+    expect(toggleChecked(["*"], "*", "*")).toEqual([]);
+  });
+  it("summarizes a selection", () => {
+    const o = { none: "None", exclusive: "*", all: "All owners (*)" };
+    expect(summarize([], o)).toBe("None");
+    expect(summarize(["*"], o)).toBe("All owners (*)");
+    expect(summarize(["acme"], o)).toBe("acme");
+    expect(summarize(["a", "b", "c"], o)).toBe("3 selected");
   });
 });

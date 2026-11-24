@@ -39,6 +39,13 @@ describe("GithubProxy", () => {
     expect(t.activity.list()[0]).toMatchObject({ status: "denied", repo: "evil/x" });
   });
 
+  it("lookup serves a UI listing through the active source without logging agent activity", async () => {
+    const t = setup({}, [{ status: 200, headers: json, body: [{ login: "acme" }] }]);
+    expect(await t.proxy.lookup("/user/orgs", { per_page: 100 })).toEqual([{ login: "acme" }]);
+    expect(t.calls[0]!.url).toBe("https://api.github.com/user/orgs?per_page=100");
+    expect(t.activity.list()).toHaveLength(0);
+  });
+
   it("refuses everything while the allowlist is empty", async () => {
     const t = setup({ allowedOwners: [] });
     await expect(t.proxy.rest(ctx, { method: "GET", path: "/repos/acme/x" })).rejects.toThrow(/Allowed owners/);

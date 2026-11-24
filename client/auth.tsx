@@ -5,9 +5,9 @@ import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { AppCredentialsView, Config, SourceId } from "../shared/config";
 import { sourceCheckRpc } from "../shared/contracts";
-import { splitList, withAlpha } from "./format";
-import { Banner, BannerText, Button, Card, Field, Heading, Muted, Pill, Toggle, type Theme } from "./ui-kit";
-import type { useConfigData } from "./data";
+import { summarize } from "./format";
+import { Banner, BannerText, Button, Card, Field, Heading, Muted, MultiSelect, Pill, Toggle, type Theme } from "./ui-kit";
+import { useOwnerChoices, type useConfigData } from "./data";
 
 type ConfigData = ReturnType<typeof useConfigData>;
 
@@ -97,21 +97,26 @@ function GhPanel({ theme }: { theme: Theme }) {
 }
 
 function Owners({ theme, config, data }: { theme: Theme; config: Config; data: ConfigData }) {
+  const found = useOwnerChoices(config.activeSource);
   const set = (owners: string[]) => data.change((c) => ({ ...c, allowedOwners: owners }));
+  const options = [{ value: "*", label: "All owners (*)", hint: "Every GitHub user and organization." }, ...found.owners.map((o) => ({ value: o, label: o }))];
   return (
     <Card theme={theme}>
-      <Heading theme={theme} icon="ShieldCheck" title="Allowed owners" hint="A safety net on top of the policy: agents can only reach repositories of these GitHub users or organizations. The default * allows every owner; remove it and add specific owners to restrict. Empty refuses everything." />
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {config.allowedOwners.length === 0 ? <Pill theme={theme} label="None: every call is refused" tone="warn" /> : null}
-        {config.allowedOwners.includes("*") ? <Pill theme={theme} label="All owners (*)" tone="good" /> : null}
-        {config.allowedOwners.map((o) => (
-          <Pressable key={o} accessibilityRole="button" accessibilityLabel={`Remove ${o}`} onPress={() => set(config.allowedOwners.filter((x) => x !== o))} style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: withAlpha(theme.colors.accent, 0.16), borderWidth: 1, borderColor: withAlpha(theme.colors.accent, 0.5) }}>
-            <Text style={{ color: theme.colors.foreground, fontSize: 13, fontWeight: "600" }}>{o}</Text>
-            <Icon name="X" size={12} color={theme.colors.foregroundMuted} />
-          </Pressable>
-        ))}
-      </View>
-      <Field theme={theme} value="" onCommit={(t) => set([...new Set([...config.allowedOwners, ...splitList(t).map((s) => s.toLowerCase())])])} placeholder="Add owners, comma separated, then press enter" />
+      <Heading theme={theme} icon="ShieldCheck" title="Allowed owners" hint="A safety net on top of the policy: agents can only reach repositories of these GitHub users or organizations. The default * allows every owner; uncheck it and pick specific owners to restrict. Empty refuses everything." />
+      <MultiSelect
+        theme={theme}
+        label="Allowed owners"
+        options={options}
+        selected={config.allowedOwners}
+        onChange={set}
+        exclusive="*"
+        allowCustom
+        customPlaceholder="Add another owner, then press enter"
+        summary={(s) => summarize(s, { none: "None: every call is refused", exclusive: "*", all: "All owners (*)" })}
+        loading={found.loading}
+        note={found.error ? `Could not list owners from the active source (${found.error}). Type one to add it.` : "Owners come from the active source. Type to add one that is not listed."}
+      />
+      {config.allowedOwners.length === 0 ? <Pill theme={theme} label="None: every call is refused" tone="warn" /> : null}
     </Card>
   );
 }

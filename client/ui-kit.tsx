@@ -1,8 +1,8 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import { Icon, TextInput } from "@getpaseo/plugin/client/ui";
 import { useEffect, useState, type ReactNode } from "react";
-import { Pressable, Text, View, type DimensionValue, type StyleProp, type ViewStyle } from "react-native";
-import { withAlpha } from "./format";
+import { Modal, Pressable, ScrollView, Text, View, type DimensionValue, type StyleProp, type ViewStyle } from "react-native";
+import { toggleChecked, withAlpha } from "./format";
 
 export type Theme = PluginTheme;
 export type Tone = "neutral" | "good" | "warn" | "bad" | "info";
@@ -229,4 +229,105 @@ export function BannerText({ theme, children, strong }: { theme: Theme; children
 
 export function Muted({ theme, children, size = 12 }: { theme: Theme; children: ReactNode; size?: number }) {
   return <Text style={{ color: theme.colors.foregroundMuted, fontSize: size, lineHeight: size + 5 }}>{children}</Text>;
+}
+
+export interface MultiOption {
+  value: string;
+  label: string;
+  hint?: string;
+}
+
+/**
+ * A dropdown whose options are checkable. The trigger shows a summary; it opens a sheet (a Modal, so it works on mobile) with a
+ * checkbox per option, an optional text box to add a custom value, and closes on Done or a tap outside.
+ * `exclusive` is a value that, once checked, clears every other one (such as `*`), and is cleared when another is checked.
+ */
+export function MultiSelect({
+  theme, label, options, selected, onChange, summary, exclusive, allowCustom, customPlaceholder, emptyText, loading, note, disabled,
+}: {
+  theme: Theme;
+  label?: string;
+  options: MultiOption[];
+  selected: string[];
+  onChange(next: string[]): void;
+  summary(selected: string[]): string;
+  exclusive?: string;
+  allowCustom?: boolean;
+  customPlaceholder?: string;
+  emptyText?: string;
+  loading?: boolean;
+  note?: string;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  // Values that are selected but not in the options (typed by hand, or saved earlier) stay listed so they can be unchecked.
+  const known = new Set(options.map((o) => o.value));
+  const all: MultiOption[] = [...options, ...selected.filter((s) => !known.has(s)).map((value) => ({ value, label: value }))];
+  const toggle = (value: string) => onChange(toggleChecked(selected, value, exclusive));
+  const addCustom = () => {
+    const values = draft.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean);
+    setDraft("");
+    if (values.length) onChange(values.reduce((acc, v) => (acc.includes(v) ? acc : toggleChecked(acc, v, exclusive)), selected));
+  };
+  return (
+    <View style={{ gap: 5 }}>
+      {label ? <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12, fontWeight: "600" }}>{label}</Text> : null}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${label ?? "Choose"}: ${summary(selected)}`}
+        accessibilityState={{ expanded: open, disabled: !!disabled }}
+        disabled={disabled}
+        onPress={() => setOpen(true)}
+        style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 11, paddingVertical: 9, borderRadius: 9, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.surface0, opacity: disabled ? 0.5 : 1 }}
+      >
+        <Text numberOfLines={1} style={{ flex: 1, color: theme.colors.foreground, fontSize: 13 }}>{summary(selected)}</Text>
+        <Icon name="ChevronDown" size={14} color={theme.colors.foregroundMuted} />
+      </Pressable>
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <Pressable accessibilityLabel="Close" onPress={() => setOpen(false)} style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <Pressable onPress={() => undefined} accessible={false} style={{ width: "100%", maxWidth: 460, maxHeight: "85%", borderRadius: 14, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.surface1, padding: 14, gap: 10 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Text style={{ flex: 1, color: theme.colors.foreground, fontSize: 14, fontWeight: "600" }}>{label ?? "Choose"}</Text>
+              <Button theme={theme} kind="primary" label="Done" onPress={() => setOpen(false)} />
+            </View>
+            {note ? <Text style={{ color: theme.colors.foregroundMuted, fontSize: 11, lineHeight: 16 }}>{note}</Text> : null}
+            <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 2 }} keyboardShouldPersistTaps="handled">
+              {loading ? <Muted theme={theme}>Loading…</Muted> : null}
+              {!loading && all.length === 0 ? <Muted theme={theme}>{emptyText ?? "Nothing to choose from."}</Muted> : null}
+              {all.map((o) => {
+                const checked = selected.includes(o.value);
+                const blocked = !!exclusive && o.value !== exclusive && selected.includes(exclusive);
+                return (
+                  <Pressable key={o.value} accessibilityRole="checkbox" accessibilityState={{ checked }} accessibilityLabel={o.label} onPress={() => toggle(o.value)} style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8, paddingHorizontal: 6, borderRadius: 8, opacity: blocked ? 0.45 : 1 }}>
+                    <View style={{ width: 18, height: 18, borderRadius: 5, borderWidth: 2, borderColor: checked ? theme.colors.accent : theme.colors.foregroundMuted, backgroundColor: checked ? theme.colors.accent : "transparent", alignItems: "center", justifyContent: "center" }}>
+                      {checked ? <Icon name="Check" size={12} color={theme.colors.surface1} /> : null}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: theme.colors.foreground, fontSize: 13 }}>{o.label}</Text>
+                      {o.hint ? <Text style={{ color: theme.colors.foregroundMuted, fontSize: 11 }}>{o.hint}</Text> : null}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+            {allowCustom ? (
+              <TextInput
+                accessibilityLabel={customPlaceholder ?? "Add a value"}
+                value={draft}
+                onChangeText={setDraft}
+                onSubmitEditing={addCustom}
+                onBlur={addCustom}
+                placeholder={customPlaceholder ?? "Type a value, then press enter"}
+                placeholderTextColor={theme.colors.foregroundMuted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={{ color: theme.colors.foreground, backgroundColor: theme.colors.surface0, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 9, paddingHorizontal: 11, paddingVertical: 9, fontSize: 13 }}
+              />
+            ) : null}
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </View>
+  );
 }

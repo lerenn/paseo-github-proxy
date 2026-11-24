@@ -37,3 +37,18 @@ export function presetOf(defaultAllow: readonly string[], presets: Record<string
   const sorted = [...defaultAllow].sort().join(",");
   return Object.entries(presets).find(([, allow]) => [...allow].sort().join(",") === sorted)?.[0] ?? "custom";
 }
+
+/** Checks or unchecks `value`. Checking the `exclusive` value (such as `*`) clears the rest; checking anything else clears it. */
+export function toggleChecked(selected: readonly string[], value: string, exclusive?: string): string[] {
+  if (selected.includes(value)) return selected.filter((s) => s !== value);
+  if (exclusive && value === exclusive) return [value];
+  return [...selected.filter((s) => s !== exclusive), value];
+}
+
+/** "None", the single item, or "3 selected"; `all` names the exclusive value's meaning. */
+export function summarize(selected: readonly string[], opts: { none: string; exclusive?: string; all?: string }): string {
+  if (selected.length === 0) return opts.none;
+  if (opts.exclusive && selected.includes(opts.exclusive)) return opts.all ?? "All";
+  if (selected.length === 1) return selected[0]!;
+  return `${selected.length} selected`;
+}

@@ -13,8 +13,8 @@ A denied call returns a message that names the rule and the reason, so the agent
 Open GitHub Proxy from the sidebar.
 
 - Auth: pick the local `gh` CLI (it must be logged in on the daemon machine) or a GitHub App (App ID, installation ID and private key). The private key is stored in a file on the daemon machine that only its user can read, and is never sent back to the app. An option falls back to the other source when the active one is rate limited.
-- Allowed owners: list the GitHub users and organizations agents may reach. The default is `*` (every owner); replace it to restrict agents. An empty list refuses every call.
-- Policy: starts read-only. Switch to the PR workflow or full preset, or allow individual actions, and add allow or deny rules per repository pattern. A test box shows what the policy would say about a call without sending anything.
+- Allowed owners: check the GitHub users and organizations agents may reach in a dropdown filled from the active source. The default is `*` (every owner); replace it to restrict agents. An empty list refuses every call.
+- Policy: starts read-only. Switch to the PR workflow or full preset, or check individual actions in a dropdown, and add allow or deny rules per repository pattern. A test box shows what the policy would say about a call without sending anything.
 
 An optional setting adds an instruction to every agent's system prompt and tool descriptions to use these tools instead of `gh` or `curl`. It is a soft rule: an agent with a shell can still run `gh`.
 
