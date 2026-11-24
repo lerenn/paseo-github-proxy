@@ -15,7 +15,7 @@ const SEMVER = /^(\d+)\.(\d+)\.(\d+)$/;
 const base = process.argv[2];
 if (!base) fail("usage: check-version.mjs <base-commit>");
 
-const git = (...args) => execFileSync("git", args, { encoding: "utf8" });
+const git = (...args) => execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
 const parse = (v, where) => {
   const m = SEMVER.exec(v ?? "");
   if (!m) fail(`${where}: version "${v}" is not MAJOR.MINOR.PATCH`);
@@ -34,7 +34,16 @@ if (lock.version !== head || lock.packages?.[""]?.version !== head) {
   fail(`package-lock.json version differs from package.json (${head}); bump with "npm version <patch|minor|major> --no-git-tag-version"`);
 }
 
-const baseVersion = JSON.parse(git("show", `${base}:package.json`)).version;
+let baseVersion = null;
+try {
+  baseVersion = JSON.parse(git("show", `${base}:package.json`)).version;
+} catch {
+  // The base has no package.json: this is the plugin's first release, so there is nothing to bump from.
+}
+if (baseVersion === null) {
+  console.log(`The base has no package.json: first release, version ${head} needs no bump.`);
+  process.exit(0);
+}
 const order = compare(parse(head, "package.json"), parse(baseVersion, "base package.json"));
 if (order < 0) fail(`version goes backwards: ${baseVersion} -> ${head}`);
 
