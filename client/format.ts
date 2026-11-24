@@ -1,3 +1,4 @@
+import type { SourceId } from "../shared/config";
 /** "in 4m 12s", "in 59s", "now": time left until an epoch ms. */
 export function countdown(until: number, now: number): string {
   const s = Math.max(0, Math.ceil((until - now) / 1000));
@@ -52,3 +53,9 @@ export function summarize(selected: readonly string[], opts: { none: string; exc
   if (selected.length === 1) return selected[0]!;
   return `${selected.length} selected`;
 }
+
+export const SOURCE_OPTIONS: { id: SourceId; title: string; text: string; icon: string }[] = [
+  { id: "gh", title: "Local gh CLI", text: "Your own GitHub login on this machine.", icon: "Terminal" },
+  { id: "app", title: "GitHub Apps", text: "Dedicated App installations, one per owner, each with its own rate limit.", icon: "KeyRound" },
+];
+
