@@ -45,7 +45,7 @@ function AppEditor({ theme, app, apps, config, data, onDone }: { theme: Theme; a
         }
       />
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
-        <Field theme={theme} label="Label" value={label} onCommit={setLabel} placeholder="Anyshift org" />
+        <Field theme={theme} label="Label" value={label} onCommit={setLabel} placeholder="Acme org" />
         <Field theme={theme} label="App ID" value={appId} onCommit={setAppId} placeholder="123456" />
         <Field theme={theme} label="Installation ID" value={installationId} onCommit={setInstallationId} placeholder="78901234" />
       </View>
