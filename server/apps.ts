@@ -1,4 +1,4 @@
-import type { AppEntry } from "../shared/config";
+import { appName, type AppEntry } from "../shared/config";
 import { AppSource, type AppCredentials, type FetchFn, type TokenSource } from "./auth";
 
 export { resolveApp } from "../shared/config";
@@ -31,7 +31,7 @@ export class AppPool implements AppDirectory {
   source(id: string): AppSource {
     let s = this.sources.get(id);
     if (!s) {
-      const label = () => `GitHub App "${this.store.apps().find((a) => a.id === id)?.label ?? id}"`;
+      const label = () => `GitHub App "${(() => { const a = this.store.apps().find((x) => x.id === id); return a ? appName(a) : id; })()}"`;
       s = new AppSource(() => this.store.appCredentials(id), this.fetchFn, this.clock, this.apiBase, label);
       this.sources.set(id, s);
     }

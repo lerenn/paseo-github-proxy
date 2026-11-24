@@ -1,5 +1,5 @@
 import { evaluate } from "./policy";
-import { resolveApp, type AppEntry, type Config, type SourceId } from "../shared/config";
+import { appName, appOwners, resolveApp, type AppEntry, type Config, type SourceId } from "../shared/config";
 
 /** A read-only GET against the GitHub API through the active source, cached; the proxy supplies it. `via.app` forces one GitHub App (by id). */
 export type LookupFn = (path: string, query?: Record<string, string | number>, via?: { app: string }) => Promise<unknown>;
@@ -22,11 +22,12 @@ export async function discoverOwners(lookup: LookupFn, source: SourceId, apps: A
       const owners: string[] = [];
       const errors: string[] = [];
       for (const app of apps) {
+        owners.push(...appOwners(app));
         try {
           const data = (await lookup("/installation/repositories", { per_page: PER_PAGE }, { app: app.id })) as { repositories?: { owner?: { login?: string } }[] };
           owners.push(...logins((data.repositories ?? []).map((r) => r.owner)));
         } catch (error) {
-          errors.push(`${app.label}: ${(error as Error).message}`);
+          errors.push(`${appName(app)}: ${(error as Error).message}`);
         }
       }
       return { owners: unique(owners), error: errors.join("; ") };

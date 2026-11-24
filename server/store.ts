@@ -3,7 +3,7 @@ import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "n
 import { homedir } from "node:os";
 import path from "node:path";
 import { z } from "zod";
-import { appEntrySchema, configSchema, defaultConfig, type AppCredentialsView, type AppEntry, type Config } from "../shared/config";
+import { appEntrySchema, appName, appOwners, isOwnerName, configSchema, defaultConfig, type AppCredentialsView, type AppEntry, type Config } from "../shared/config";
 import { keyFingerprint, type AppCredentials } from "./auth";
 
 /** `$PASEO_HOME/plugin-data/lerenn/paseo-github-proxy`. */
@@ -30,7 +30,10 @@ function readJson(file: string): unknown {
 export interface AppInput {
   /** Empty to add an App. */
   id?: string;
-  label: string;
+  /** The GitHub account the App is installed on; claimed automatically. */
+  organization: string;
+  /** Legacy display name of an App without organization; ignored when an organization is given. */
+  label?: string;
   appId: string;
   installationId: string;
   owners: string[];
@@ -40,6 +43,11 @@ export interface AppInput {
 }
 
 const slug = (text: string): string => text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32) || "app";
+/** Config never ends with two default Apps: the first one (in stored order) keeps it. */
+const singleDefault = (apps: AppEntry[]): AppEntry[] => {
+  let seen = false;
+  return apps.map((a) => (a.default && seen ? { ...a, default: false } : ((seen ||= a.default), a)));
+};
 const normOwners = (owners: string[]): string[] => [...new Set(owners.map((o) => o.trim().toLowerCase()).filter((o) => o && o !== "*"))];
 
 /**
@@ -63,7 +71,7 @@ export class ConfigStore {
     const stored = readJson(path.join(dir, "apps.json")) as { apps?: unknown } | null;
     if (stored) {
       const list = z.array(appEntrySchema).safeParse(stored.apps ?? []);
-      this.appList = list.success ? list.data : [];
+      this.appList = list.success ? singleDefault(list.data as AppEntry[]) : [];
       // A crash between the migration steps can leave the old entry behind: drop it.
       if (secrets?.app) this.writeSecrets();
     } else if (secrets?.app?.appId && secrets.app.installationId && secrets.app.privateKey) {
@@ -75,7 +83,7 @@ export class ConfigStore {
   private migrate(legacy: AppCredentials): void {
     const id = "default";
     this.keys.set(id, legacy.privateKey);
-    this.appList = [{ id, label: "GitHub App", appId: legacy.appId, installationId: legacy.installationId, owners: [], default: true }];
+    this.appList = [{ id, organization: "", label: "GitHub App", appId: legacy.appId, installationId: legacy.installationId, owners: [], default: true }];
     try {
       writeJson(path.join(this.dir, "secrets.json"), { app: legacy, apps: { [id]: { privateKey: legacy.privateKey } } }, 0o600);
       this.writeApps();
@@ -126,29 +134,31 @@ export class ConfigStore {
   saveApp(input: AppInput): string {
     const existing = input.id ? this.appList.find((a) => a.id === input.id) : undefined;
     if (input.id && !existing) throw new Error("That GitHub App no longer exists.");
-    const label = input.label.trim();
+    const organization = input.organization.trim().toLowerCase();
+    const label = organization ? "" : (input.label ?? existing?.label ?? "").trim();
     const appId = input.appId.trim();
     const installationId = input.installationId.trim();
     const privateKey = input.privateKey.trim() || (existing ? this.keys.get(existing.id) : "") || "";
-    if (!label || !appId || !installationId || !privateKey) throw new Error("A label, App ID, installation id and private key are all required.");
+    if ((!organization && !label) || !appId || !installationId || !privateKey) throw new Error("An organization or user, App ID, installation id and private key are all required.");
+    if (organization && !isOwnerName(organization)) throw new Error(`"${input.organization.trim()}" is not a valid GitHub organization or user name.`);
     try {
       createPrivateKey(privateKey);
     } catch {
       throw new Error("The private key is not a valid PEM key.");
     }
     const others = this.appList.filter((a) => a.id !== existing?.id);
-    if (others.some((a) => a.label.toLowerCase() === label.toLowerCase())) throw new Error(`Another GitHub App is already labelled "${label}".`);
     if (others.some((a) => a.appId === appId)) throw new Error(`App ID ${appId} is already configured.`);
-    const owners = normOwners(input.owners);
-    for (const owner of owners) {
-      const taken = others.find((a) => a.owners.includes(owner));
-      if (taken) throw new Error(`The owner "${owner}" is already served by the GitHub App "${taken.label}". An owner can belong to one App only.`);
+    const owners = normOwners(input.owners).filter((o) => o !== organization);
+    for (const owner of appOwners({ organization, owners })) {
+      const taken = others.find((a) => appOwners(a).includes(owner));
+      if (taken) throw new Error(`The owner "${owner}" is already served by the GitHub App "${appName(taken)}". An owner can belong to one App only.`);
     }
-    let id = existing?.id ?? slug(label);
-    if (!existing) for (let n = 2; this.appList.some((a) => a.id === id); n++) id = `${slug(label)}-${n}`;
+    const name = organization || label;
+    let id = existing?.id ?? slug(name);
+    if (!existing) for (let n = 2; this.appList.some((a) => a.id === id); n++) id = `${slug(name)}-${n}`;
     const makeDefault = input.default || (!existing && others.length === 0);
-    const entry: AppEntry = { id, label, appId, installationId, owners, default: makeDefault };
-    this.appList = [...others.map((a) => (makeDefault ? { ...a, default: false } : a)), entry].sort((a, b) => Number(b.default) - Number(a.default) || a.label.localeCompare(b.label));
+    const entry: AppEntry = { id, organization, label, appId, installationId, owners, default: makeDefault };
+    this.appList = [...others.map((a) => (makeDefault ? { ...a, default: false } : a)), entry].sort((a, b) => Number(b.default) - Number(a.default) || appName(a).localeCompare(appName(b)));
     this.keys.set(id, privateKey);
     this.writeSecrets();
     this.writeApps();

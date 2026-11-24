@@ -2,7 +2,7 @@ import type { Action } from "../shared/actions";
 import type { Config, SourceId } from "../shared/config";
 import type { ActivityStatus, Overview } from "../shared/state";
 import type { ActivityLog } from "./activity";
-import { resolveApp, type AppEntry } from "../shared/config";
+import { appName, appOwners, resolveApp, type AppEntry } from "../shared/config";
 import { appKey, type AppDirectory } from "./apps";
 import { AuthError, chooseSources, type FetchFn, type TokenSource } from "./auth";
 import { cacheKey, isFresh, type CacheEntry, type ResponseCache } from "./cache";
@@ -235,7 +235,7 @@ export class GithubProxy {
   private appCredential(p: Prepared): Credential {
     const { app, problem } = p.via ? { app: this.deps.apps.list().find((a) => a.id === p.via!.app) ?? null, problem: "That GitHub App no longer exists." } : this.appFor(p.owners);
     if (!app) return { key: "app:", source: "app", label: "GitHub App", app: null, token: null, problem: problem ?? "No GitHub App is configured. Ask the user to add one in GitHub Proxy → Auth." };
-    return { key: appKey(app.id), source: "app", label: `GitHub App "${app.label}"`, app: app.label, token: this.deps.apps.source(app.id) };
+    return { key: appKey(app.id), source: "app", label: `GitHub App "${appName(app)}"`, app: appName(app), token: this.deps.apps.source(app.id) };
   }
 
   /** The credentials to try, in order: the active source, then the other one when fallback is on. */
@@ -360,7 +360,7 @@ export class GithubProxy {
     const apps = this.deps.apps.list();
     const rows = [
       { source: "gh" as const, key: "gh", label: "gh CLI", owners: [] as string[], default: false, configured: this.deps.gh.configured() as boolean },
-      ...apps.map((a) => ({ source: "app" as const, key: appKey(a.id), label: a.label, owners: a.owners, default: a.default, configured: this.deps.apps.source(a.id).configured() as boolean })),
+      ...apps.map((a) => ({ source: "app" as const, key: appKey(a.id), label: appName(a), owners: appOwners(a), default: a.default, configured: this.deps.apps.source(a.id).configured() as boolean })),
       // With no App yet, one placeholder keeps the "GitHub App: not configured" card.
       ...(apps.length === 0 ? [{ source: "app" as const, key: "app:", label: "GitHub App", owners: [] as string[], default: false, configured: false }] : []),
     ];

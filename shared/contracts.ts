@@ -23,7 +23,10 @@ export const appCredentialsSaveRpc = defineRpc({
   name: "github-proxy.app.save",
   input: z.object({
     id: z.string().default(""),
-    label: z.string(),
+    /** The account the App is installed on. */
+    organization: z.string().default(""),
+    /** Legacy display name, kept as is for migrated Apps without an organization. */
+    label: z.string().default(""),
     appId: z.string(),
     installationId: z.string(),
     owners: z.array(z.string()).default([]),

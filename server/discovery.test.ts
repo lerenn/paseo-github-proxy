@@ -8,7 +8,7 @@ const lookupOf = (routes: Record<string, unknown>): LookupFn => async (path, _qu
   if (r === undefined) throw new Error(`404 ${path}`);
   return r;
 };
-const app = (id: string, owners: string[] = [], isDefault = false): AppEntry => ({ id, label: id, appId: id, installationId: "1", owners, default: isDefault });
+const app = (id: string, owners: string[] = [], isDefault = false): AppEntry => ({ id, organization: "", label: id, appId: id, installationId: "1", owners, default: isDefault });
 const cfg = (patch: Partial<Config>): Config => ({ ...defaultConfig(), ...patch });
 
 describe("discoverOwners", () => {

@@ -30,4 +30,4 @@ Curated tools state their action directly and do not need `generic_api_*`.
 
 ## Files
 
-`$PASEO_HOME/plugin-data/lerenn/paseo-github-proxy/`: `config.json` (settings, policy), `apps.json` (GitHub Apps, no secret), `secrets.json` (App private keys, 0600), `cache.json` (response cache).
+`$PASEO_HOME/plugin-data/lerenn/paseo-github-proxy/`: `config.json` (settings, policy), `apps.json` (GitHub Apps: organization, ids, extra owners, default flag; no secret), `secrets.json` (App private keys, 0600), `cache.json` (response cache).

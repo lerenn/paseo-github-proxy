@@ -12,7 +12,7 @@ A denied call returns a message that names the rule and the reason, so the agent
 
 Open GitHub Proxy from the sidebar.
 
-- Auth: pick the local `gh` CLI (it must be logged in on the daemon machine) or one or several GitHub Apps (label, App ID, installation ID, private key and the owners each serves, since an App is installed by one account). Each App has its own rate limit, shown in Overview. The private keys are stored in a file on the daemon machine that only its user can read, and is never sent back to the app. An option falls back to the other source when the active one is rate limited.
+- Auth: pick the local `gh` CLI (it must be logged in on the daemon machine) or one or several GitHub Apps (the organization or user it is installed on, App ID, installation ID, private key and optional extra owners). Each App has its own rate limit, shown in Overview. The private keys are stored in a file on the daemon machine that only its user can read, and is never sent back to the app. An option falls back to the other source when the active one is rate limited.
 - Allowed owners: check the GitHub users and organizations agents may reach in a dropdown filled from the active source (every App is asked). The default is `*` (every owner); replace it to restrict agents. An empty list refuses every call.
 - Policy: starts read-only. Switch to the PR workflow or full preset, or check individual actions in a dropdown, and add allow or deny rules per repository pattern. A test box shows what the policy would say about a call without sending anything.
 
