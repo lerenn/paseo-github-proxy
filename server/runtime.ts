@@ -7,7 +7,7 @@ import { RateLimitTracker } from "./ratelimit";
 import { ConfigStore, dataDir } from "./store";
 
 export const nodeFetch: FetchFn = async (url, init) => {
-  const res = await fetch(url, { method: init.method, headers: init.headers, ...(init.body !== undefined ? { body: init.body } : {}), signal: AbortSignal.timeout(30_000) });
+  const res = await fetch(url, { method: init.method, headers: init.headers, ...(init.body !== undefined ? { body: init.body } : {}), signal: AbortSignal.timeout(30_000) as never });
   return { status: res.status, headers: res.headers, text: () => res.text() };
 };
 

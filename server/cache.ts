@@ -110,7 +110,7 @@ export class ResponseCache {
       this.timer = null;
       this.flush();
     }, this.debounceMs);
-    this.timer.unref?.();
+    (this.timer as unknown as { unref?: () => void }).unref?.();
   }
 
   flush(): void {
