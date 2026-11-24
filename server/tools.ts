@@ -1,3 +1,4 @@
+import { PR_STATE_QUERY, mergeStatus } from "./mergequeue";
 import { z } from "zod";
 import type { AgentToolDefinition } from "@getpaseo/plugin/server";
 import { ACTIONS, ACTION_INFO } from "../shared/actions";
@@ -79,13 +80,28 @@ export function buildTools(deps: ToolsDeps): AgentToolDefinition[] {
 
     tool(
       "github_get_pr",
-      "Get one pull request. Use include to also fetch its changed files, commits, reviews, comments, review threads (with the thread ids github_pr_manage resolves) or the raw unified diff.",
+      "Get one pull request, including merged, merged_at, auto_merge ({enabled, method, enabled_by}) and, when it is in a merge queue, merge_queue ({state QUEUED|AWAITING_CHECKS|MERGEABLE|UNMERGEABLE|LOCKED, position, estimated_time_to_merge, failing_check?}): one call tells you whether a queued pull request merged, so poll with this, or wake on github_subscribe (merge_queue_destroyed, pr_merged). Use include to also fetch its changed files, commits, reviews, comments, review threads (with the thread ids github_pr_manage resolves) or the raw unified diff.",
       z.object({ repo: repoField, number: z.number().int(), include: z.array(z.enum(["files", "commits", "reviews", "comments", "threads", "diff"])).optional() }),
       async ({ repo, number, include }, _ctx, c) => {
         const target = await c.repo(repo);
         const base = `/repos/${target}/pulls/${number}`;
         const main = await get(c, base);
         const out: Record<string, unknown> = { ...pr(main.data as any), body: (main.data as any).body, additions: (main.data as any).additions, deletions: (main.data as any).deletions, changed_files: (main.data as any).changed_files, head_sha: (main.data as any).head?.sha };
+        const m = main.data as any;
+        out.merged = !!m.merged_at || !!m.merged;
+        if (m.merged_at) out.merged_at = m.merged_at;
+        out.auto_merge = { enabled: !!m.auto_merge, method: m.auto_merge?.merge_method ?? null, ...(m.auto_merge?.enabled_by?.login ? { enabled_by: m.auto_merge.enabled_by.login } : {}) };
+        if (!out.merged && m.state === "open") {
+          const [owner, name] = target.split("/") as [string, string];
+          try {
+            const g = await kit.gql(c, PR_STATE_QUERY, { owner, name, number }, { actions: ["read"], repo: target });
+            const status = mergeStatus((g.data as any)?.data?.repository?.pullRequest);
+            if (status.merge_queue) out.merge_queue = status.merge_queue;
+            if (status.auto_merge.enabled) out.auto_merge = status.auto_merge;
+          } catch {
+            /* the queue state is a bonus: the pull request itself was read */
+          }
+        }
         if (include?.includes("files")) out.files = ((await get(c, `${base}/files`, { per_page: 100 })).data as any[]).map((f) => ({ filename: f.filename, status: f.status, additions: f.additions, deletions: f.deletions, patch: f.patch?.slice(0, 4000) }));
         if (include?.includes("reviews")) out.reviews = ((await get(c, `${base}/reviews`, { per_page: 100 })).data as any[]).map((v) => ({ user: v.user?.login, state: v.state, body: v.body, submitted_at: v.submitted_at }));
         if (include?.includes("comments")) {
@@ -126,7 +142,7 @@ export function buildTools(deps: ToolsDeps): AgentToolDefinition[] {
 
     tool(
       "github_merge_pr",
-      "Merge a pull request. Pass sha (the head commit you reviewed) to refuse the merge if the branch moved.",
+      "Merge a pull request directly. If the repository only merges through a merge queue (HTTP 405), use github_pr_manage with operation auto_merge instead. Pass sha (the head commit you reviewed) to refuse the merge if the branch moved.",
       z.object({ repo: repoField, number: z.number().int(), merge_method: z.enum(["merge", "squash", "rebase"]).optional(), commit_title: z.string().optional(), commit_message: z.string().optional(), sha: z.string().optional() }),
       async ({ repo, number, ...rest }, _ctx, c) => clip((await write(c, "PUT", `/repos/${await c.repo(repo)}/pulls/${number}/merge`, "merge", rest)).data),
     ),

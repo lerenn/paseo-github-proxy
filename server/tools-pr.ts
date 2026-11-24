@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { AgentToolDefinition } from "@getpaseo/plugin/server";
 import { ProxyError } from "./proxy";
+import { PR_STATE_QUERY, REQUIRES_QUEUE_QUERY, queueResult } from "./mergequeue";
 import { clip, clipText, encPath, issue, need, page, pagination, repoField, served, type Kit } from "./toolkit";
 
 const MERGE_METHODS = { merge: "MERGE", squash: "SQUASH", rebase: "REBASE" } as const;
@@ -143,7 +144,7 @@ export function prTools(kit: Kit): AgentToolDefinition[] {
 
     tool(
       "github_pr_manage",
-      "Manage a pull request beyond editing it. operation: ready (mark ready for review), draft (convert to draft), update_branch (merge the base into the head; optional sha), auto_merge (enable auto-merge, with merge_method), disable_auto_merge, request_reviewers / remove_reviewers (reviewers and team_reviewers), reply (reply to a review comment, comment_id from github_get_pr comments), resolve_thread / unresolve_thread (thread_id from github_get_pr include threads).",
+      "Manage a pull request beyond editing it. operation: ready (mark ready for review), draft (convert to draft), update_branch (merge the base into the head; optional sha), auto_merge (enable auto-merge, or add the pull request to the merge queue when the base branch requires one; merge_method applies to auto-merge only), disable_auto_merge, request_reviewers / remove_reviewers (reviewers and team_reviewers), reply (reply to a review comment, comment_id from github_get_pr comments), resolve_thread / unresolve_thread (thread_id from github_get_pr include threads). auto_merge and disable_auto_merge return {number, queued, auto_merge: {enabled, method, enabled_by?}, merge_queue: {state, position?, estimated_time_to_merge?} or {state: NOT_QUEUED}, merged, reason?}; reason says why it was not queued (conflicts, failing checks, missing reviews, draft, behind). Then poll with one github_get_pr call (it returns merged and merge_queue), or wait with github_subscribe (events merge_queue_destroyed, pr_merged, pr_auto_merge) instead of polling.",
       z.object({
         operation: z.enum(["ready", "draft", "update_branch", "auto_merge", "disable_auto_merge", "request_reviewers", "remove_reviewers", "reply", "resolve_thread", "unresolve_thread"]),
         repo: repoField,
@@ -161,6 +162,12 @@ export function prTools(kit: Kit): AgentToolDefinition[] {
         const [owner, name] = target.split("/") as [string, string];
         const url = `/repos/${target}/pulls/${i.number}`;
         const nodeId = async () => (((await get(c, url)).data as any).node_id as string);
+        const readPr = async () => {
+          const r = await gql(c, PR_STATE_QUERY, { owner, name, number: i.number }, { actions: ["read"], repo: target });
+          const node = (r.data as any)?.data?.repository?.pullRequest;
+          if (!node) throw new ProxyError("http", `GitHub did not return ${target}#${i.number}.`);
+          return node;
+        };
         const mutate = async (field: string, input: Record<string, unknown>, action: "update_pr" | "merge" | "review", selection: string) => {
           const r = await gql(c, `mutation($input: ${field[0]!.toUpperCase()}${field.slice(1)}Input!) { ${field}(input: $input) { ${selection} } }`, { input }, { actions: [action], repo: target });
           const errors = (r.data as any)?.errors;
@@ -172,10 +179,27 @@ export function prTools(kit: Kit): AgentToolDefinition[] {
             return clip((await mutate("markPullRequestReadyForReview", { pullRequestId: await nodeId() }, "update_pr", "pullRequest { number isDraft }")).pullRequest);
           case "draft":
             return clip((await mutate("convertPullRequestToDraft", { pullRequestId: await nodeId() }, "update_pr", "pullRequest { number isDraft }")).pullRequest);
-          case "auto_merge":
-            return clip((await mutate("enablePullRequestAutoMerge", { pullRequestId: await nodeId(), mergeMethod: MERGE_METHODS[i.merge_method ?? "merge"] }, "merge", "pullRequest { number autoMergeRequest { enabledAt mergeMethod } }")).pullRequest);
-          case "disable_auto_merge":
-            return clip((await mutate("disablePullRequestAutoMerge", { pullRequestId: await nodeId() }, "merge", "pullRequest { number }")).pullRequest);
+          case "auto_merge": {
+            let pr = await readPr();
+            if (!pr.merged && !pr.isInMergeQueue && !pr.mergeQueueEntry && !pr.autoMergeRequest) {
+              const mq = await gql(c, REQUIRES_QUEUE_QUERY, { owner, name, branch: pr.baseRefName }, { actions: ["read"], repo: target });
+              const queue = !!(mq.data as any)?.data?.repository?.mergeQueue;
+              try {
+                if (queue) await mutate("enqueuePullRequest", { pullRequestId: pr.id }, "merge", "mergeQueueEntry { state position }");
+                else await mutate("enablePullRequestAutoMerge", { pullRequestId: pr.id, mergeMethod: MERGE_METHODS[i.merge_method ?? "merge"] }, "merge", "pullRequest { number }");
+              } catch (error) {
+                if (!(error instanceof ProxyError) || error.kind !== "http") throw error;
+                return clip(queueResult(await readPr(), error.message));
+              }
+              pr = await readPr();
+            }
+            return clip(queueResult(pr));
+          }
+          case "disable_auto_merge": {
+            const pr = await readPr();
+            await mutate("disablePullRequestAutoMerge", { pullRequestId: pr.id }, "merge", "pullRequest { number }");
+            return clip(queueResult(await readPr()));
+          }
           case "update_branch":
             return clip((await write(c, "PUT", `${url}/update-branch`, "update_pr", i.sha ? { expected_head_sha: i.sha } : {})).data);
           case "request_reviewers":
