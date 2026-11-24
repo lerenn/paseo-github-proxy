@@ -108,3 +108,13 @@ describe("tools", () => {
     expect(SOFT_RULE_PROMPT).toMatch(/unless|only if the user explicitly asks/);
   });
 });
+
+describe("tool registration", () => {
+  it("registers every tool unconditionally and synchronously, with stable names", () => {
+    const names = (soft: boolean) => make({}, [], soft).tools.map((t) => t.name);
+    expect(names(false)).toEqual(names(true));
+    expect(names(false)).toEqual(make({}, []).tools.map((t) => t.name));
+    expect(new Set(names(false)).size).toBe(names(false).length);
+    expect(names(false)).toEqual(expect.arrayContaining(["github_create_pr", "github_get_pr", "github_actions", "github_pr_manage", "github_merge_pr"]));
+  });
+});

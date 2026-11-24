@@ -25,7 +25,7 @@ Tools with an `operation` input group related commands so the tool list stays sh
 | `pr close`, `pr reopen` | `github_update_pr` state (`update_pr`) | covered | |
 | `pr ready`, `pr ready --undo` | `github_pr_manage` ready, draft (`update_pr`) | added | REST has no endpoint; uses GraphQL |
 | `pr merge` | `github_merge_pr` (`merge`) | covered | |
-| `pr merge --auto`, `--disable-auto` | `github_pr_manage` auto_merge, disable_auto_merge (`merge`) | added | |
+| `pr merge --auto`, `--disable-auto` | `github_pr_manage` auto_merge, disable_auto_merge (`merge`) | added | Enqueues when the base branch has a merge queue. Returns `{queued, auto_merge, merge_queue, merged, reason?}`; poll with `github_get_pr` (`merged`, `merge_queue`) or wake on `github_subscribe` (`merge_queue_destroyed`, `pr_merged`). A direct `github_merge_pr` refused with HTTP 405 by a queue says to use auto_merge. |
 | `pr review` | `github_review_pr` (`review`) | covered | |
 | `pr comment` | `github_comment` (`comment`) | covered | |
 | `pr comment --edit-last`, `--delete-last` | `github_edit_comment` (`update_pr`) | added | the agent lists comments and picks the id |

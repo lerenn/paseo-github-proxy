@@ -437,5 +437,6 @@ function httpMessage(status: number, body: string): string {
     /* keep the raw text */
   }
   const hint = status === 404 ? " (not found, or the credentials cannot see it)" : status === 403 ? " (forbidden: the credentials lack this permission)" : "";
-  return `GitHub answered HTTP ${status}${hint}: ${detail}`;
+  const queue = status === 405 && /merge queue/i.test(detail) ? " This repository only merges through its merge queue, so do not retry the direct merge. Use github_pr_manage with operation auto_merge (it adds the pull request to the queue), then check github_get_pr (merged, merge_queue) or wait with github_subscribe." : "";
+  return `GitHub answered HTTP ${status}${hint}: ${detail}${queue}`;
 }

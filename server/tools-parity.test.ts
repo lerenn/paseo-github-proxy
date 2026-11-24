@@ -66,7 +66,7 @@ describe("every write operation is denied under the read-only default, and nothi
   ];
   for (const [name, input] of writes) {
     it(`${name} ${String(input.operation ?? "")}`, async () => {
-      const any = { body: { node_id: "N", default_branch: "main", data: { owner: { projectV2: { id: "P", fields: { nodes: [] } } } } } };
+      const any = { body: { node_id: "N", default_branch: "main", data: { repository: { pullRequest: { id: "N", number: 1, baseRefName: "main" } }, owner: { projectV2: { id: "P", fields: { nodes: [] } } } } } };
       const t = make({}, [any, any, any]);
       const r = await t.run(name, input);
       expect(r.isError).toBe(true);
@@ -147,11 +147,76 @@ describe("issues and pull requests", () => {
   });
 
   it("auto-merge needs the merge action; pr_workflow does not have it", async () => {
-    const denied = make({ policy: presetPolicy("pr_workflow") }, [{ body: { node_id: "PR_1" } }]);
+    const prNode = { body: { data: { repository: { pullRequest: { id: "PR_1", number: 3, state: "OPEN", baseRefName: "main" } } } } };
+    const denied = make({ policy: presetPolicy("pr_workflow") }, [prNode, { body: { data: { repository: { mergeQueue: null } } } }]);
     expect((await denied.run("github_pr_manage", { operation: "auto_merge", number: 3 })).text).toMatch(/"Merge" is not allowed/);
-    const ok = make(full, [{ body: { node_id: "PR_1" } }, { body: { data: { enablePullRequestAutoMerge: { pullRequest: { number: 3 } } } } }]);
-    await ok.run("github_pr_manage", { operation: "auto_merge", number: 3, merge_method: "squash" });
-    expect(gqlBody(ok.calls[1]!).variables.input).toEqual({ pullRequestId: "PR_1", mergeMethod: "SQUASH" });
+  });
+
+  const node = (extra: Record<string, unknown> = {}) => ({ body: { data: { repository: { pullRequest: { id: "PR_1", number: 3, state: "OPEN", baseRefName: "main", ...extra } } } } });
+  const noQueue = { body: { data: { repository: { mergeQueue: null } } } };
+  const hasQueue = { body: { data: { repository: { mergeQueue: { id: "MQ" } } } } };
+  const ok = { body: { data: {} } };
+
+  it("auto_merge without a queue enables auto-merge and reports it", async () => {
+    const t = make(full, [node(), noQueue, ok, node({ autoMergeRequest: { mergeMethod: "SQUASH", enabledBy: { login: "bot" } } })]);
+    const r = JSON.parse((await t.run("github_pr_manage", { operation: "auto_merge", number: 3, merge_method: "squash" })).text);
+    expect(gqlBody(t.calls[2]!).query).toContain("enablePullRequestAutoMerge");
+    expect(gqlBody(t.calls[2]!).variables.input).toEqual({ pullRequestId: "PR_1", mergeMethod: "SQUASH" });
+    expect(r).toEqual({ number: 3, queued: true, auto_merge: { enabled: true, method: "squash", enabled_by: "bot" }, merge_queue: { state: "NOT_QUEUED" }, merged: false });
+  });
+
+  it("auto_merge enqueues when the base branch has a merge queue", async () => {
+    const t = make(full, [node(), hasQueue, ok, node({ isInMergeQueue: true, mergeQueueEntry: { state: "AWAITING_CHECKS", position: 2, estimatedTimeToMerge: 300 } })]);
+    const r = JSON.parse((await t.run("github_pr_manage", { operation: "auto_merge", number: 3 })).text);
+    expect(gqlBody(t.calls[2]!).query).toContain("enqueuePullRequest");
+    expect(r).toMatchObject({ queued: true, merged: false, auto_merge: { enabled: false, method: null }, merge_queue: { state: "AWAITING_CHECKS", position: 2, estimated_time_to_merge: 300 } });
+    expect(r.reason).toBeUndefined();
+  });
+
+  it("auto_merge says why a pull request was not queued", async () => {
+    const refused = { body: { errors: [{ message: "Pull request is not mergeable" }] } };
+    const t = make(full, [node(), hasQueue, refused, node({ mergeStateStatus: "BLOCKED", reviewDecision: "REVIEW_REQUIRED" })]);
+    const r = JSON.parse((await t.run("github_pr_manage", { operation: "auto_merge", number: 3 })).text);
+    expect(r).toMatchObject({ queued: false, merged: false });
+    expect(r.reason).toMatch(/not mergeable/);
+    const failing = { commits: { nodes: [{ commit: { statusCheckRollup: { contexts: { nodes: [{ __typename: "CheckRun", name: "build", conclusion: "FAILURE" }] } } } }] } };
+    const t2 = make(full, [node(failing), hasQueue, ok, node(failing)]);
+    expect(JSON.parse((await t2.run("github_pr_manage", { operation: "auto_merge", number: 3 })).text).reason).toMatch(/failing: build/);
+    const t3 = make(full, [node({ mergeStateStatus: "DIRTY" }), hasQueue, ok, node({ mergeStateStatus: "DIRTY" })]);
+    expect(JSON.parse((await t3.run("github_pr_manage", { operation: "auto_merge", number: 3 })).text).reason).toMatch(/conflicts/);
+    const t4 = make(full, [node({ merged: true, mergedAt: "2026-01-01T00:00:00Z" })]);
+    expect(JSON.parse((await t4.run("github_pr_manage", { operation: "auto_merge", number: 3 })).text)).toMatchObject({ queued: false, merged: true });
+    expect(t4.calls).toHaveLength(1);
+  });
+
+  it("disable_auto_merge reports the state afterwards", async () => {
+    const t = make(full, [node({ autoMergeRequest: { mergeMethod: "MERGE" } }), ok, node({ mergeStateStatus: "CLEAN" })]);
+    const r = JSON.parse((await t.run("github_pr_manage", { operation: "disable_auto_merge", number: 3 })).text);
+    expect(gqlBody(t.calls[1]!).query).toContain("disablePullRequestAutoMerge");
+    expect(r).toMatchObject({ queued: false, auto_merge: { enabled: false } });
+  });
+
+  it("github_get_pr reports merged, auto_merge and merge_queue", async () => {
+    const queued = node({ mergeQueueEntry: { state: "UNMERGEABLE", position: 1, estimatedTimeToMerge: null }, commits: { nodes: [{ commit: { statusCheckRollup: { contexts: { nodes: [{ name: "test", conclusion: "FAILURE" }, { name: "lint", conclusion: "SUCCESS" }] } } } }] } });
+    const t = make({}, [{ body: { number: 3, state: "open", merged_at: null, auto_merge: { merge_method: "squash", enabled_by: { login: "me" } } } }, queued]);
+    const r = JSON.parse((await t.run("github_get_pr", { number: 3 })).text);
+    expect(r).toMatchObject({ merged: false, auto_merge: { enabled: true, method: "squash", enabled_by: "me" }, merge_queue: { state: "UNMERGEABLE", position: 1, failing_check: ["test"] } });
+    const done = make({}, [{ body: { number: 3, state: "closed", merged_at: "2026-01-01T00:00:00Z" } }]);
+    const d = JSON.parse((await done.run("github_get_pr", { number: 3 })).text);
+    expect(d).toMatchObject({ merged: true, merged_at: "2026-01-01T00:00:00Z", auto_merge: { enabled: false } });
+    expect(d.merge_queue).toBeUndefined();
+    expect(done.calls).toHaveLength(1);
+  });
+
+  it("a direct merge refused by a merge queue tells the agent to use auto_merge", async () => {
+    const t = make(full, [{ status: 405, body: { message: "Changes must be made through the merge queue" } }]);
+    const r = await t.run("github_merge_pr", { number: 3 });
+    expect(r.isError).toBe(true);
+    expect(r.text).toMatch(/HTTP 405/);
+    expect(r.text).toMatch(/github_pr_manage with operation auto_merge/);
+    expect(r.text).toMatch(/do not retry the direct merge/);
+    const other = make(full, [{ status: 405, body: { message: "Pull Request is not mergeable" } }]);
+    expect((await other.run("github_merge_pr", { number: 3 })).text).not.toMatch(/auto_merge/);
   });
 
   it("requests reviewers, updates the branch and replies to a review comment", async () => {

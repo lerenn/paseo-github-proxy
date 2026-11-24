@@ -131,10 +131,10 @@ Related operations are grouped behind one tool with an `operation` input (for ex
 | `github_list_branches` | List branches. | `read` |
 | `github_delete_branch` | Delete a branch. | `delete_branch` |
 | `github_list_prs` | List pull requests. | `read` |
-| `github_get_pr` | One pull request; include files, commits, reviews, comments, review threads or the raw diff. | `read` |
+| `github_get_pr` | One pull request with merged, auto_merge and (when queued) merge_queue; include files, commits, reviews, comments, review threads or the raw diff. | `read` |
 | `github_create_pr` | Open a pull request. | `create_pr` |
 | `github_update_pr` | Edit, close or reopen a pull request. | `update_pr` |
-| `github_pr_manage` | Ready or draft, update the branch, auto-merge, request reviewers, reply to a review comment, resolve or unresolve a thread. | update_pr, merge, comment or review, by operation |
+| `github_pr_manage` | Ready or draft, update the branch, auto-merge or enqueue in a merge queue (explicit queued, merge_queue, merged, reason result), request reviewers, reply to a review comment, resolve or unresolve a thread. | update_pr, merge, comment or review, by operation |
 | `github_merge_pr` | Merge a pull request; pass sha to refuse if the branch moved. | `merge` |
 | `github_review_pr` | Approve, request changes or comment, with optional line comments. | `review` |
 | `github_comment` | Comment on an issue or pull request. | `comment` |
