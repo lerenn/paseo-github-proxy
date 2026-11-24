@@ -1,3 +1,4 @@
+import { HELPER_KEY } from "./githelpers";
 import { createHash, timingSafeEqual } from "node:crypto";
 import http from "node:http";
 import { isLoopbackAddress, type ClientApiConfig } from "../shared/config";
@@ -366,15 +367,31 @@ const shellQuote = (text: string): string => `'${text.replace(/'/g, `'\\''`)}'`;
  * Pass `helperPath: null` to leave git alone (no helper script, or no GitHub App that could issue a token).
  * The helper runs with `nodePath` (the node that runs the daemon), so no PATH is assumed.
  * Entries the session already has (an existing GIT_CONFIG_COUNT) are kept: the new ones are appended after them.
+ * The github.com helper list is reset, then the plugin helper comes first (it is policy-gated; a helper baked into an
+ * image can hand out read-only tokens and shadow it), then `fallbacks` (the helpers git already had, and those of the
+ * session's own GIT_CONFIG_*) in their order, without empties, duplicates or the plugin helper itself. The plugin helper
+ * prints nothing when it cannot issue a token, so git then tries the fallbacks.
  */
-export function clientEnv(input: { config: ClientApiConfig; token: string; helperPath: string | null; nodePath?: string; existing?: Record<string, string> }): Record<string, string> {
+export function clientEnv(input: { config: ClientApiConfig; token: string; helperPath: string | null; nodePath?: string; existing?: Record<string, string>; fallbacks?: readonly string[] }): Record<string, string> {
   const env: Record<string, string> = { GH_PROXY_URL: clientApiUrl(input.config), GH_PROXY_TOKEN: input.token || NO_TOKEN_PLACEHOLDER };
   if (!input.helperPath) return env;
-  const start = Math.max(0, Number.parseInt(input.existing?.GIT_CONFIG_COUNT ?? "0", 10) || 0);
+  const existing = input.existing ?? {};
+  const start = Math.max(0, Number.parseInt(existing.GIT_CONFIG_COUNT ?? "0", 10) || 0);
+  const ours = `!${shellQuote(input.nodePath ?? "node")} ${shellQuote(input.helperPath)}`;
+  const own: string[] = [];
+  for (let i = 0; i < start; i++) if (existing[`GIT_CONFIG_KEY_${i}`]?.toLowerCase() === HELPER_KEY) own.push(existing[`GIT_CONFIG_VALUE_${i}`] ?? "");
+  const seen = new Set<string>([ours]);
+  const fallbacks: string[] = [];
+  for (const raw of [...(input.fallbacks ?? []), ...own]) {
+    const value = raw.trim();
+    if (!value || seen.has(value) || value.includes(input.helperPath)) continue;
+    seen.add(value);
+    fallbacks.push(value);
+  }
   const entries: [string, string][] = [
-    // No empty value first: that would reset the helper list and drop the user's own helpers. Ours is appended and is
-    // asked only when the ones before it have no credential.
-    ["credential.https://github.com.helper", `!${shellQuote(input.nodePath ?? "node")} ${shellQuote(input.helperPath)}`],
+    [HELPER_KEY, ""],
+    [HELPER_KEY, ours],
+    ...fallbacks.map((value): [string, string] => [HELPER_KEY, value]),
     ["credential.https://github.com.useHttpPath", "true"],
   ];
   entries.forEach(([key, value], i) => {

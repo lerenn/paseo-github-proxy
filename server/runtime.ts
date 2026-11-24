@@ -5,6 +5,7 @@ import { GhCliSource, type FetchFn } from "./auth";
 import { ResponseCache } from "./cache";
 import { ClientApi, ClientApiServer, gitCredentialsAvailable } from "./clientapi";
 import { GitCredentials } from "./gitcred";
+import { GitHelperFallbacks } from "./githelpers";
 import { installHelper, type HelperInstall } from "./helper-install";
 import { staleKeyTest } from "./events";
 import { GithubProxy } from "./proxy";
@@ -66,7 +67,7 @@ export function createRuntime(dir = dataDir(), fetchFn: FetchFn = nodeFetch) {
   );
 
   return {
-    git, clientApi, ensureHelper, store, cache, tracker, activity, gh, apps, proxy, subscriptions, wake, webhooks,
+    git, gitFallbacks: new GitHelperFallbacks(), clientApi, ensureHelper, store, cache, tracker, activity, gh, apps, proxy, subscriptions, wake, webhooks,
     /** Remembers the SDK handle of the context a hook, tool or RPC runs in. */
     capturePaseo(handle: AgentSender | undefined): void {
       if (handle) paseo = handle;

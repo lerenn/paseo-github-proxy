@@ -28,6 +28,8 @@ Errors are JSON. A denial is `403 {"error":"policy_denied","message":"...","rule
 
 ## Git credentials
 
+**Helper order.** The plugin helper is first and the helpers the machine already had follow it as fallbacks (reset, then ours, then theirs). The policy therefore decides read or write for git wherever an App serves the owner; a helper baked into an image (for example an old `gh` shim that asks for a read token) cannot shadow it. The trade-off: git asks the plugin first, so a token is minted per repository even where the machine's own credentials would have worked. When the plugin cannot issue a token (no App for the owner, policy denial, unreachable) the helper prints nothing and git moves on to the fallbacks. See [ADR 2026-11-24-git-helper-order](adrs/2026-11-24-git-helper-order.md).
+
 `POST /v1/git-credential` answers only `https://github.com/<owner>/<repo>[.git]` (git must send the path: `credential.useHttpPath=true`). Anything else gets `404 not_served`, which makes the helper print nothing so git tries the next helper.
 
 1. The owner allowlist and the policy's `read` action must allow the repository, otherwise `403 policy_denied` (nothing is minted).
@@ -47,7 +49,7 @@ With **Set it up in every new agent session** on, the plugin adds this to the en
 | --- | --- |
 | `GH_PROXY_URL` | `http://127.0.0.1:<port>` (the bind address; `0.0.0.0` maps to `127.0.0.1`) |
 | `GH_PROXY_TOKEN` | the token, or the placeholder `none` when no token is set (the old shim refuses an empty value; the server ignores it) |
-| `GIT_CONFIG_COUNT` and `GIT_CONFIG_KEY_n` / `GIT_CONFIG_VALUE_n` | appended after any entries already present (an existing `GIT_CONFIG_COUNT` is continued, not overwritten): `credential.https://github.com.helper=!'<node>' '<data dir>/git-credential-helper.mjs'` (`<node>` is the absolute path of the node binary running the daemon, so no PATH is assumed), `credential.https://github.com.useHttpPath=true` |
+| `GIT_CONFIG_COUNT` and `GIT_CONFIG_KEY_n` / `GIT_CONFIG_VALUE_n` | appended after any entries already present (an existing `GIT_CONFIG_COUNT` is continued, not overwritten): `credential.https://github.com.helper=` (empty: resets the list), `credential.https://github.com.helper=!'<node>' '<data dir>/git-credential-helper.mjs'` (`<node>` is the absolute path of the node binary running the daemon, so no PATH is assumed), then the github.com helpers git already had (`git config --get-all credential.https://github.com.helper`, read at session open, cached 60 s, 3 s timeout; none if it fails) as fallbacks in their order, without empties or duplicates, then `credential.https://github.com.useHttpPath=true`. Only when a GitHub App is configured |
 
 The helper list is **not reset**, so the helpers the machine already has (`gh auth setup-git`, a keychain, a store) stay and ours comes after them. The trade-off: on a machine with its own working git credentials, those win and the plugin policy does not gate git (it still gates `gh` and the tools); on a machine with no other helper, such as a lab pod, the plugin is used. The git part is added only when at least one GitHub App is configured, because only an App can issue a scoped token; with the gh CLI and no App, sessions get `GH_PROXY_URL` and `GH_PROXY_TOKEN` only, and the Client API card says so. It is re-evaluated each time a session opens.
 
