@@ -41,7 +41,7 @@ Pick **one active source**. Optionally turn on **Fall back to the other source o
 
 ### 2. Allow owners (Auth tab)
 
-Add the GitHub users and organizations agents may act on, for example `acme, lerenn`. This is a safety net on top of the policy. `*` allows all owners. **While the list is empty every call is refused.**
+Add the GitHub users and organizations agents may act on, for example `acme, lerenn`. This is a safety net on top of the policy. The default is `*`, which allows every owner; replace it with specific owners to restrict agents. **If you clear the list, every call is refused.**
 
 ### 3. Set the policy (Policy tab)
 

@@ -100,9 +100,10 @@ function Owners({ theme, config, data }: { theme: Theme; config: Config; data: C
   const set = (owners: string[]) => data.change((c) => ({ ...c, allowedOwners: owners }));
   return (
     <Card theme={theme}>
-      <Heading theme={theme} icon="ShieldCheck" title="Allowed owners" hint="A safety net on top of the policy: agents can only reach repositories of these GitHub users or organizations. Use * to allow every owner. Empty refuses everything." />
+      <Heading theme={theme} icon="ShieldCheck" title="Allowed owners" hint="A safety net on top of the policy: agents can only reach repositories of these GitHub users or organizations. The default * allows every owner; remove it and add specific owners to restrict. Empty refuses everything." />
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
         {config.allowedOwners.length === 0 ? <Pill theme={theme} label="None: every call is refused" tone="warn" /> : null}
+        {config.allowedOwners.includes("*") ? <Pill theme={theme} label="All owners (*)" tone="good" /> : null}
         {config.allowedOwners.map((o) => (
           <Pressable key={o} accessibilityRole="button" accessibilityLabel={`Remove ${o}`} onPress={() => set(config.allowedOwners.filter((x) => x !== o))} style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: withAlpha(theme.colors.accent, 0.16), borderWidth: 1, borderColor: withAlpha(theme.colors.accent, 0.5) }}>
             <Text style={{ color: theme.colors.foreground, fontSize: 13, fontWeight: "600" }}>{o}</Text>
