@@ -49,8 +49,8 @@ export type SourceId = (typeof SOURCES)[number];
 export const webhooksSchema = z.object({
   enabled: z.boolean().default(false),
   port: z.number().int().min(1).max(65535).default(8787),
-  /** Address the listener binds to. Loopback by default: put a tunnel or reverse proxy in front to reach it from GitHub. */
-  bind: z.string().trim().min(1).max(64).default("127.0.0.1"),
+  /** Address the listener binds to. Every interface by default (the plugin runs behind a Service or tunnel; signatures protect it). Set 127.0.0.1 to keep it on this machine. */
+  bind: z.string().trim().min(1).max(64).default("0.0.0.0"),
 });
 export type WebhooksConfig = z.infer<typeof webhooksSchema>;
 export const WEBHOOK_PATH = "/webhook";
@@ -64,7 +64,7 @@ export const configSchema = z.object({
   forbidRawGithub: z.boolean().default(false),
   /** The hard rule: deny permission requests for gh, and curl or wget aimed at GitHub. Off by default. */
   blockRawGithub: z.boolean().default(false),
-  webhooks: webhooksSchema.default({ enabled: false, port: 8787, bind: "127.0.0.1" }),
+  webhooks: webhooksSchema.default({ enabled: false, port: 8787, bind: "0.0.0.0" }),
   policy: policySchema.default({ preset: "full", defaultAllow: [...PRESET_INFO.full.allow], rules: [], actionsVersion: CATALOG_VERSION }),
 });
 export type Config = z.infer<typeof configSchema>;
@@ -164,3 +164,9 @@ export const WEBHOOK_EVENTS = [
 ] as const;
 /** Also read, for the cache only (no wake-up): subscribe to them to keep issue and thread reads fresh. */
 export const WEBHOOK_EVENTS_CACHE_ONLY = ["issues", "pull_request_review_thread"] as const;
+
+/** The listener URL to show: 0.0.0.0 is a listen-everywhere address, not somewhere to connect to. */
+export function webhookListenerUrl(bind: string, port: number, path: string): string {
+  const host = bind === "0.0.0.0" || bind === "::" ? "<this machine>" : bind;
+  return `http://${host}:${port}${path}`;
+}

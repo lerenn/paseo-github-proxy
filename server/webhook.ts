@@ -138,7 +138,7 @@ export class WebhookReceiver {
 export class WebhookServer {
   private server: http.Server | null = null;
   private error = "";
-  private current: WebhooksConfig = { enabled: false, port: 8787, bind: "127.0.0.1" };
+  private current: WebhooksConfig = { enabled: false, port: 8787, bind: "0.0.0.0" };
 
   constructor(
     private readonly receiver: WebhookReceiver,

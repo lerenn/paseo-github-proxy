@@ -1,7 +1,7 @@
 import { Icon } from "@getpaseo/plugin/client/ui";
 import { useState } from "react";
 import { Text, View } from "react-native";
-import { WEBHOOK_EVENTS, WEBHOOK_PATH, type AppCredentialsView, type Config } from "../shared/config";
+import { WEBHOOK_EVENTS, WEBHOOK_PATH, webhookListenerUrl, type AppCredentialsView, type Config } from "../shared/config";
 import { clock } from "./format";
 import { Banner, BannerText, Button, Card, Field, Heading, Muted, Pill, Stat, Toggle, type Theme } from "./ui-kit";
 import { useSubscriptions, useWebhookStatus, type useConfigData } from "./data";
@@ -13,7 +13,7 @@ export function WebhooksCard({ theme, config, apps, data }: { theme: Theme; conf
   const status = useWebhookStatus().data;
   const hooks = config.webhooks;
   const set = (patch: Partial<Config["webhooks"]>) => data.change((c) => ({ ...c, webhooks: { ...c.webhooks, ...patch } }));
-  const localUrl = `http://${hooks.bind}:${hooks.port}${WEBHOOK_PATH}`;
+  const localUrl = webhookListenerUrl(hooks.bind, hooks.port, WEBHOOK_PATH);
   const c = status?.counters;
   return (
     <Card theme={theme}>
@@ -23,7 +23,7 @@ export function WebhooksCard({ theme, config, apps, data }: { theme: Theme; conf
         <View style={{ gap: 12 }}>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
             <Field theme={theme} label="Port" value={String(hooks.port)} onCommit={(t) => { const n = Number(t); if (Number.isInteger(n) && n >= 1 && n <= 65535) set({ port: n }); }} placeholder="8787" />
-            <Field theme={theme} label="Bind address" value={hooks.bind} onCommit={(t) => { if (t.trim()) set({ bind: t.trim() }); }} placeholder="127.0.0.1" hint="127.0.0.1 keeps it on this machine, which is what you want behind a tunnel or reverse proxy on the same host." />
+            <Field theme={theme} label="Bind address" value={hooks.bind} onCommit={(t) => { if (t.trim()) set({ bind: t.trim() }); }} placeholder="0.0.0.0" hint="0.0.0.0 (default) listens on every interface: needed behind a Kubernetes Service or a tunnel in another container, and protected by the per-App signature on every delivery. 127.0.0.1 keeps it on this machine only: use it when the tunnel or proxy runs on the same host. Do not expose /healthz publicly." />
           </View>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
             <Pill theme={theme} label={status?.listening ? "Listening" : "Not listening"} tone={status?.listening ? "good" : "warn"} />
