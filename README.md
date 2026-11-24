@@ -95,6 +95,10 @@ The same tab holds the **cache TTL** (30 s by default) and the **Forbid direct u
 4. Rate limit: `x-ratelimit-*` headers are tracked per source and resource (`core`, `graphql`, `search`). A primary limit, a `retry-after` or a secondary-limit response blocks the source until the reset. With nothing left to try, a cached answer is served stale, or the agent receives `Retry at HH:MM`.
 5. Writes invalidate the cached reads of that repository.
 
+## Website
+
+`website/` is a static site (home, getting started, how it works, reference) published to GitHub Pages by `.github/workflows/pages.yml` when `website/**` changes on `main`. It needs Pages enabled with source "GitHub Actions" in the repository settings. No custom domain is configured; the canonical URLs in the pages and sitemap use `https://lerenn.github.io/paseo-github-proxy/`.
+
 ## Development
 
 ```bash

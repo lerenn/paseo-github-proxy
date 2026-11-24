@@ -9,6 +9,7 @@ A Paseo plugin: policy-controlled GitHub tools for every agent. Read the `paseo-
 - `client/`: app side, React Native primitives only (`node .github/scripts/mobile-audit.mjs` enforces it). `screen.tsx` is the page, one file per tab.
 - `shared/`: Zod contracts (`contracts.ts`), config schema, action catalog. No Node, no React Native.
 - `docs/adrs/`: decisions.
+- `website/`: static GitHub Pages site (plain HTML and `style.css`, no build). Keep it in step with the README when tools, actions or settings change.
 
 ## Rules
 
