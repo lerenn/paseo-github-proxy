@@ -43,7 +43,7 @@ function Row({ theme, entry }: { theme: Theme; entry: ActivityEntry }) {
         {entry.repo ? <Text style={{ color: theme.colors.foreground, fontSize: 13 }}>{entry.repo}</Text> : null}
         <View style={{ flex: 1 }} />
         {entry.httpStatus ? <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12 }}>HTTP {entry.httpStatus}</Text> : null}
-        {entry.source ? <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12 }}>{entry.source === "gh" ? "gh" : "app"}</Text> : null}
+        {entry.source ? <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12 }}>{entry.source === "gh" ? "gh" : `App: ${entry.app ?? "?"}`}</Text> : null}
         <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12 }}>{entry.ms} ms</Text>
       </View>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>

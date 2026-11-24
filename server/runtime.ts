@@ -1,6 +1,7 @@
 import path from "node:path";
 import { ActivityLog } from "./activity";
-import { AppSource, GhCliSource, type FetchFn } from "./auth";
+import { AppPool } from "./apps";
+import { GhCliSource, type FetchFn } from "./auth";
 import { ResponseCache } from "./cache";
 import { GithubProxy } from "./proxy";
 import { RateLimitTracker } from "./ratelimit";
@@ -18,8 +19,8 @@ export function createRuntime(dir = dataDir(), fetchFn: FetchFn = nodeFetch) {
   const tracker = new RateLimitTracker();
   const activity = new ActivityLog();
   const gh = new GhCliSource();
-  const app = new AppSource(() => store.appCredentials(), fetchFn);
-  const proxy = new GithubProxy({ config: () => store.get(), sources: { gh, app }, fetch: fetchFn, cache, tracker, activity });
-  return { store, cache, tracker, activity, gh, app, proxy, dispose: () => cache.flush() };
+  const apps = new AppPool(store, fetchFn);
+  const proxy = new GithubProxy({ config: () => store.get(), gh, apps, fetch: fetchFn, cache, tracker, activity });
+  return { store, cache, tracker, activity, gh, apps, proxy, dispose: () => cache.flush() };
 }
 export type Runtime = ReturnType<typeof createRuntime>;

@@ -4,7 +4,7 @@ import type { Overview, RateLimitView, SourceStatus } from "../shared/state";
 import { clock, countdown, percent } from "./format";
 import { Banner, BannerText, Bar, Button, Card, Heading, Muted, Pill, Sparkline, Stat, useNow, type Theme, type Tone } from "./ui-kit";
 
-const SOURCE_LABEL = { gh: "gh CLI", app: "GitHub App" } as const;
+const sourceLabel = (s: SourceStatus): string => (s.source === "gh" ? "gh CLI" : `GitHub App${s.key === "app:" ? "" : ` "${s.label}"`}`);
 const SOURCE_ICON = { gh: "Terminal", app: "KeyRound" } as const;
 
 function ratioTone(ratio: number): Tone {
@@ -34,15 +34,17 @@ function SourceCard({ theme, source, now }: { theme: Theme; source: SourceStatus
       <Heading
         theme={theme}
         icon={SOURCE_ICON[source.source]}
-        title={SOURCE_LABEL[source.source]}
+        title={sourceLabel(source)}
         right={
           <View style={{ flexDirection: "row", gap: 6 }}>
             {source.active ? <Pill theme={theme} label="Active" tone="info" /> : null}
+            {source.default ? <Pill theme={theme} label="Default" /> : null}
             {!source.configured ? <Pill theme={theme} label="Not configured" tone="warn" /> : null}
             {blocked ? <Pill theme={theme} label={`Limited until ${clock(source.blockedUntil!).slice(0, 5)}`} tone="bad" icon="Clock" /> : null}
           </View>
         }
       />
+      {source.source === "app" && source.key !== "app:" ? <Muted theme={theme}>{source.owners.length ? `Serves ${source.owners.join(", ")}${source.default ? " and every owner no other App claims" : ""}` : source.default ? "Serves every owner no other App claims" : "Serves no owner yet"}</Muted> : null}
       {source.limits.length === 0 ? (
         <Muted theme={theme}>{source.configured ? "No request has used this source yet: its limits show after the first call." : "Set it up in Auth to use it."}</Muted>
       ) : (
@@ -61,9 +63,9 @@ export function OverviewTab({ theme, data, onClearCache, onOpenAuth }: { theme: 
   return (
     <View style={{ gap: 16 }}>
       {exhausted.map((s) => (
-        <Banner key={s.source} theme={theme} tone="bad" icon="OctagonAlert">
-          <BannerText theme={theme} strong>{SOURCE_LABEL[s.source]} is rate limited until {clock(s.blockedUntil!).slice(0, 5)} ({countdown(s.blockedUntil!, now)}).</BannerText>
-          <BannerText theme={theme}>Agents get a "retry at" error and cached answers where they exist. Turn on the fallback in Auth to use the other source meanwhile.</BannerText>
+        <Banner key={s.key} theme={theme} tone="bad" icon="OctagonAlert">
+          <BannerText theme={theme} strong>{sourceLabel(s)} is rate limited until {clock(s.blockedUntil!).slice(0, 5)} ({countdown(s.blockedUntil!, now)}).</BannerText>
+          <BannerText theme={theme}>Agents get a "retry at" error and cached answers where they exist. Turn on the fallback in Auth to use the other source meanwhile; the other Apps are not affected.</BannerText>
         </Banner>
       ))}
       {others.length > 0 ? (
@@ -80,7 +82,7 @@ export function OverviewTab({ theme, data, onClearCache, onOpenAuth }: { theme: 
       ) : null}
 
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
-        {data.sources.map((s) => <SourceCard key={s.source} theme={theme} source={s} now={now} />)}
+        {data.sources.map((s) => <SourceCard key={s.key} theme={theme} source={s} now={now} />)}
       </View>
 
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>

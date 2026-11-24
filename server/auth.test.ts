@@ -66,6 +66,7 @@ describe("AppSource", () => {
   it("fails clearly when unconfigured, refused, or the key is bad, without echoing the key", async () => {
     expect(new AppSource(() => null, vi.fn()).configured()).toBe(false);
     await expect(new AppSource(() => null, vi.fn()).token()).rejects.toThrow(/not configured/);
+    await expect(new AppSource(() => null, vi.fn(), Date.now, "https://api.github.com", () => 'GitHub App "org"').token()).rejects.toThrow(/GitHub App "org"/);
     await expect(new AppSource(() => creds, async () => res(401, { message: "Bad" })).token()).rejects.toThrow(/refused.*401/);
     const bad = new AppSource(() => ({ ...creds, privateKey: "nope" }), vi.fn());
     await expect(bad.token()).rejects.toThrow(/not a valid PEM/);
@@ -74,26 +75,33 @@ describe("AppSource", () => {
 });
 
 describe("chooseSources", () => {
-  const base = { configured: { gh: true, app: true }, resource: "core" };
-  it("uses the active source only unless fallback is on", () => {
+  const cand = (key: string, configured = true) => ({ key, configured });
+  const base = { resource: "core" };
+  it("uses the candidates in order", () => {
     const tracker = new RateLimitTracker(() => 0);
-    expect(chooseSources({ ...base, active: "gh", fallback: false, tracker }).order).toEqual(["gh"]);
-    expect(chooseSources({ ...base, active: "app", fallback: true, tracker }).order).toEqual(["app", "gh"]);
+    expect(chooseSources({ ...base, candidates: [cand("gh")], tracker }).order).toEqual(["gh"]);
+    expect(chooseSources({ ...base, candidates: [cand("app:a"), cand("gh")], tracker }).order).toEqual(["app:a", "gh"]);
   });
-  it("skips a rate-limited source and falls back only when allowed", () => {
+  it("skips a rate-limited credential and reports it when nothing is left", () => {
     const tracker = new RateLimitTracker(() => 0);
     tracker.block("gh", 10_000);
-    expect(chooseSources({ ...base, active: "gh", fallback: true, tracker }).order).toEqual(["app"]);
-    const off = chooseSources({ ...base, active: "gh", fallback: false, tracker });
+    expect(chooseSources({ ...base, candidates: [cand("gh"), cand("app:a")], tracker }).order).toEqual(["app:a"]);
+    const off = chooseSources({ ...base, candidates: [cand("gh")], tracker });
     expect(off.order).toEqual([]);
-    expect(off.blocked).toEqual({ reason: "rate_limited", until: 10_000, source: "gh" });
+    expect(off.blocked).toEqual({ reason: "rate_limited", until: 10_000, key: "gh" });
   });
-  it("reports the earliest reset when both are limited, and unconfigured sources", () => {
+  it("a limit on one App leaves the other Apps usable", () => {
+    const tracker = new RateLimitTracker(() => 0);
+    tracker.block("app:a", 10_000);
+    expect(chooseSources({ ...base, candidates: [cand("app:a")], tracker }).blocked?.reason).toBe("rate_limited");
+    expect(chooseSources({ ...base, candidates: [cand("app:b")], tracker }).order).toEqual(["app:b"]);
+  });
+  it("reports the earliest reset when both are limited, and unconfigured credentials", () => {
     const tracker = new RateLimitTracker(() => 0);
     tracker.block("gh", 10_000);
-    tracker.block("app", 5_000);
-    expect(chooseSources({ ...base, active: "gh", fallback: true, tracker }).blocked).toMatchObject({ until: 5_000 });
-    const none = chooseSources({ configured: { gh: true, app: false }, active: "app", fallback: false, tracker: new RateLimitTracker(() => 0), resource: "core" });
+    tracker.block("app:a", 5_000);
+    expect(chooseSources({ ...base, candidates: [cand("gh"), cand("app:a")], tracker }).blocked).toMatchObject({ until: 5_000 });
+    const none = chooseSources({ ...base, candidates: [cand("app:", false)], tracker: new RateLimitTracker(() => 0) });
     expect(none.blocked?.reason).toBe("unconfigured");
   });
 });

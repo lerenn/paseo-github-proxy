@@ -2,6 +2,8 @@ import type { Action } from "../shared/actions";
 import type { Config, SourceId } from "../shared/config";
 import type { ActivityStatus, Overview } from "../shared/state";
 import type { ActivityLog } from "./activity";
+import { resolveApp, type AppEntry } from "../shared/config";
+import { appKey, type AppDirectory } from "./apps";
 import { AuthError, chooseSources, type FetchFn, type TokenSource } from "./auth";
 import { cacheKey, isFresh, type CacheEntry, type ResponseCache } from "./cache";
 import { classifyGraphql, classifyRest, normalizePath, type Classified } from "./classify";
@@ -34,11 +36,16 @@ export interface ProxyResponse {
   served: "upstream" | "cache" | "revalidated" | "stale";
   link: string | null;
   source: SourceId | null;
+  /** Label of the GitHub App whose credentials served (or keyed the cached answer of) the call. */
+  app: string | null;
 }
 
 export interface ProxyDeps {
   config: () => Config;
-  sources: Record<SourceId, TokenSource>;
+  /** The gh CLI credential. */
+  gh: TokenSource;
+  /** The GitHub Apps and their token sources. */
+  apps: AppDirectory;
   fetch: FetchFn;
   cache: ResponseCache;
   tracker: RateLimitTracker;
@@ -54,6 +61,22 @@ interface Prepared {
   classified: Classified;
   resource: string;
   cacheable: boolean;
+  /** The owners the call touches: they decide which GitHub App serves it. */
+  owners: string[];
+  /** Set by the settings UI to force one App (owner discovery), bypassing the active source. */
+  via?: { app: string };
+}
+
+/** A credential a call may use: the gh CLI, or the GitHub App that serves the call's owner. */
+interface Credential {
+  key: string;
+  source: SourceId;
+  label: string;
+  /** The App label, for the activity log. */
+  app: string | null;
+  token: TokenSource | null;
+  /** Why it cannot be used, written for the agent. */
+  problem?: string;
 }
 
 export interface DryRun {
@@ -86,7 +109,7 @@ export class GithubProxy {
     // A curated tool states what it does; only github_api is classified from the path.
     if (input.actions) classified.actions = input.actions;
     const body = input.body === undefined ? undefined : JSON.stringify(input.body);
-    return this.run(ctx, { method, url: `${this.base}${path}${qs ? `?${qs}` : ""}`, ...(body !== undefined ? { body } : {}), classified, resource: resourceOf(path), cacheable: method === "GET" });
+    return this.run(ctx, { method, url: `${this.base}${path}${qs ? `?${qs}` : ""}`, ...(body !== undefined ? { body } : {}), classified, resource: resourceOf(path), cacheable: method === "GET", owners: classified.owners });
   }
 
   async graphql(ctx: CallContext, input: { query: string; variables?: Record<string, unknown>; repo?: string }): Promise<ProxyResponse> {
@@ -95,7 +118,7 @@ export class GithubProxy {
       return this.refuse(ctx, classified, "Denied: GraphQL subscriptions are not supported.");
     }
     const body = JSON.stringify({ query: input.query, ...(input.variables ? { variables: input.variables } : {}) });
-    return this.run(ctx, { method: "POST", url: `${this.base}/graphql`, body, classified, resource: "graphql", cacheable: classified.info.operation === "query" });
+    return this.run(ctx, { method: "POST", url: `${this.base}/graphql`, body, classified, resource: "graphql", cacheable: classified.info.operation === "query", owners: classified.owners });
   }
 
   /** Same checks as a real call, nothing sent to GitHub: for the "test this call" box. */
@@ -114,11 +137,12 @@ export class GithubProxy {
   /**
    * A cached GET used by the settings UI (owner and repository pickers), not by agents: it is read-only, goes through the
    * active source, cache and rate-limit tracking, and is not logged as agent activity. Callers apply the owner allowlist and policy to what they return.
+   * `via.app` asks one GitHub App (by id) to answer, as installation endpoints are per App.
    */
-  async lookup(path: string, query: Record<string, string | number> = {}): Promise<unknown> {
+  async lookup(path: string, query: Record<string, string | number> = {}, via?: { app: string }): Promise<unknown> {
     const params = new URLSearchParams(Object.entries(query).map(([k, v]): [string, string] => [k, String(v)]));
     const qs = params.toString();
-    const p: Prepared = { method: "GET", url: `${this.base}${path}${qs ? `?${qs}` : ""}`, classified: classifyRest("GET", path), resource: resourceOf(path), cacheable: true };
+    const p: Prepared = { method: "GET", url: `${this.base}${path}${qs ? `?${qs}` : ""}`, classified: classifyRest("GET", path), resource: resourceOf(path), cacheable: true, owners: [], ...(via ? { via } : {}) };
     return (await this.fetchThrough(p)).data;
   }
 
@@ -143,7 +167,7 @@ export class GithubProxy {
     return evaluate(config.policy, target, actions);
   }
 
-  private record(ctx: CallContext, c: Classified, status: ActivityStatus, extra: { httpStatus?: number | null; source?: SourceId | null; detail?: string; started: number }): void {
+  private record(ctx: CallContext, c: Classified, status: ActivityStatus, extra: { httpStatus?: number | null; source?: SourceId | null; app?: string | null; detail?: string; started: number }): void {
     this.deps.activity.add({
       agentId: ctx.agentId,
       agentTitle: ctx.agentTitle,
@@ -153,6 +177,7 @@ export class GithubProxy {
       status,
       httpStatus: extra.httpStatus ?? null,
       source: extra.source ?? null,
+      app: extra.app ?? null,
       detail: extra.detail ?? "",
       ms: Math.max(0, this.clock() - extra.started),
     });
@@ -176,6 +201,7 @@ export class GithubProxy {
       this.record(ctx, p.classified, response.served === "stale" ? "cached" : status, {
         httpStatus: response.status,
         source: response.source,
+        app: response.app,
         detail: response.served === "stale" ? "served stale: rate limited" : "",
         started,
       });
@@ -187,54 +213,104 @@ export class GithubProxy {
     }
   }
 
+  /** The App that serves a call: the one claiming its owners, else the default one. Owners of two Apps cannot be mixed. */
+  private appFor(owners: string[]): { app: AppEntry | null; problem?: string } {
+    const apps = this.deps.apps.list();
+    const found = new Map<string, AppEntry>();
+    for (const owner of owners.length ? owners : [""]) {
+      const app = resolveApp(apps, owner);
+      if (!app) {
+        return { app: null, problem: owner ? `No GitHub App serves the owner "${owner}". Ask the user to assign it to an App, or mark a default App, in GitHub Proxy → Auth.` : "No default GitHub App is set. Ask the user to mark one in GitHub Proxy → Auth." };
+      }
+      found.set(app.id, app);
+    }
+    if (found.size > 1) return { app: null, problem: `This call spans owners (${owners.join(", ")}) served by different GitHub Apps. Do not retry as is: split it into one call per owner.` };
+    return { app: [...found.values()][0] ?? null };
+  }
+
+  private ghCredential(): Credential {
+    return { key: "gh", source: "gh", label: "gh CLI", app: null, token: this.deps.gh };
+  }
+
+  private appCredential(p: Prepared): Credential {
+    const { app, problem } = p.via ? { app: this.deps.apps.list().find((a) => a.id === p.via!.app) ?? null, problem: "That GitHub App no longer exists." } : this.appFor(p.owners);
+    if (!app) return { key: "app:", source: "app", label: "GitHub App", app: null, token: null, problem: problem ?? "No GitHub App is configured. Ask the user to add one in GitHub Proxy → Auth." };
+    return { key: appKey(app.id), source: "app", label: `GitHub App "${app.label}"`, app: app.label, token: this.deps.apps.source(app.id) };
+  }
+
+  /** The credentials to try, in order: the active source, then the other one when fallback is on. */
+  private credentials(p: Prepared, config: Config): Credential[] {
+    if (p.via) return [this.appCredential(p)];
+    const gh = this.ghCredential();
+    const app = this.appCredential(p);
+    const [first, second] = config.activeSource === "gh" ? [gh, app] : [app, gh];
+    return config.fallbackOnRateLimit ? [first, second] : [first];
+  }
+
   private async fetchThrough(p: Prepared): Promise<ProxyResponse> {
     const config = this.deps.config();
-    const key = cacheKey(p.method, p.url, p.body);
-    const entry = p.cacheable ? this.deps.cache.get(key) : undefined;
     const now = this.clock();
-    if (entry && isFresh(entry, config.cacheTtlSeconds, now)) return this.fromEntry(entry, "cache", null);
-
+    const creds = this.credentials(p, config);
     const choice = chooseSources({
-      active: config.activeSource,
-      fallback: config.fallbackOnRateLimit,
-      configured: { gh: this.deps.sources.gh.configured() as boolean, app: this.deps.sources.app.configured() as boolean },
+      candidates: creds.map((c) => ({ key: c.key, configured: !!c.token && !c.problem && (c.token.configured() as boolean) })),
       tracker: this.deps.tracker,
       resource: p.resource,
     });
-    if (choice.order.length === 0) {
-      if (entry) return this.fromEntry(entry, "stale", null);
+    const byKey = new Map(creds.map((c) => [c.key, c]));
+    const keyOf = (c: Credential) => cacheKey(p.method, p.url, p.body, c.key);
+    const entryOf = (c: Credential | undefined) => (p.cacheable && c ? this.deps.cache.get(keyOf(c)) : undefined);
+    const usable = choice.order.map((k) => byKey.get(k)!);
+
+    // A fresh answer is looked up under the identity that would serve the call, never another one.
+    const primary = usable[0];
+    const primaryEntry = entryOf(primary);
+    if (primary && primaryEntry && isFresh(primaryEntry, config.cacheTtlSeconds, now)) return this.fromEntry(primaryEntry, "cache", null, primary);
+
+    // While nothing can be used, a stale answer of a credential this call may use beats an error.
+    const stale = (): { entry: CacheEntry; cred: Credential } | undefined => {
+      for (const c of creds) {
+        const e = c.problem ? undefined : entryOf(c);
+        if (e) return { entry: e, cred: c };
+      }
+      return undefined;
+    };
+    if (usable.length === 0) {
+      const s = stale();
+      if (s) return this.fromEntry(s.entry, "stale", null, s.cred);
       const b = choice.blocked;
-      if (b?.reason === "rate_limited" && b.until) throw new ProxyError("rate_limited", limitMessage(b.source, b.until, now), 429);
-      throw new ProxyError("auth", `The ${config.activeSource === "gh" ? "gh CLI" : "GitHub App"} source is not configured. Ask the user to set it up in GitHub Proxy → Auth.`, 401);
+      const blocking = b ? byKey.get(b.key) : undefined;
+      if (b?.reason === "rate_limited" && b.until && blocking) throw new ProxyError("rate_limited", limitMessage(blocking.label, b.until, now), 429);
+      throw new ProxyError("auth", blocking?.problem ?? `The ${blocking?.label ?? "selected credential"} is not configured. Ask the user to set it up in GitHub Proxy → Auth.`, 401);
     }
 
-    let lastLimit: { source: SourceId; until: number } | null = null;
-    for (const source of choice.order) {
+    let lastLimit: { cred: Credential; until: number } | null = null;
+    for (const cred of usable) {
       try {
-        const out = await this.send(source, p, entry, key);
+        const out = await this.send(cred, p, entryOf(cred), keyOf(cred));
         if (out.kind === "limited") {
-          lastLimit = { source, until: out.until };
+          lastLimit = { cred, until: out.until };
           continue;
         }
         return out.response;
       } catch (error) {
         if (error instanceof AuthError) {
-          if (choice.order.length > 1 && source !== choice.order[choice.order.length - 1]) continue;
+          if (usable.length > 1 && cred !== usable[usable.length - 1]) continue;
           throw new ProxyError("auth", error.message, 401);
         }
         throw error;
       }
     }
-    if (entry) return this.fromEntry(entry, "stale", lastLimit?.source ?? null);
-    throw new ProxyError("rate_limited", limitMessage(lastLimit!.source, lastLimit!.until, this.clock()), 429);
+    const s = stale();
+    if (s) return this.fromEntry(s.entry, "stale", lastLimit?.cred.source ?? null, s.cred);
+    throw new ProxyError("rate_limited", limitMessage(lastLimit!.cred.label, lastLimit!.until, this.clock()), 429);
   }
 
-  private fromEntry(entry: CacheEntry, served: ProxyResponse["served"], source: SourceId | null): ProxyResponse {
-    return { status: entry.status, data: parseBody(entry.body, entry.contentType), served, link: entry.link, source };
+  private fromEntry(entry: CacheEntry, served: ProxyResponse["served"], source: SourceId | null, cred: Credential): ProxyResponse {
+    return { status: entry.status, data: parseBody(entry.body, entry.contentType), served, link: entry.link, source, app: cred.app };
   }
 
-  private async send(source: SourceId, p: Prepared, entry: CacheEntry | undefined, key: string): Promise<{ kind: "ok"; response: ProxyResponse } | { kind: "limited"; until: number }> {
-    const tokenSource = this.deps.sources[source];
+  private async send(cred: Credential, p: Prepared, entry: CacheEntry | undefined, key: string): Promise<{ kind: "ok"; response: ProxyResponse } | { kind: "limited"; until: number }> {
+    const tokenSource = cred.token!;
     for (let attempt = 0; attempt < 2; attempt++) {
       const token = await tokenSource.token();
       const headers: Record<string, string> = {
@@ -248,7 +324,7 @@ export class GithubProxy {
       const res = await this.deps.fetch(p.url, { method: p.method, headers, ...(p.body !== undefined ? { body: p.body } : {}) });
       const now = this.clock();
       const text = res.status === 304 ? "" : await res.text();
-      this.deps.tracker.record(source, parseRateLimit(res.headers, now));
+      this.deps.tracker.record(cred.key, parseRateLimit(res.headers, now));
 
       if (res.status === 401 && attempt === 0) {
         tokenSource.invalidate();
@@ -256,12 +332,12 @@ export class GithubProxy {
       }
       const verdict = detectLimit(res.status, res.headers, text, now);
       if (verdict.limited) {
-        this.deps.tracker.block(source, verdict.until);
+        this.deps.tracker.block(cred.key, verdict.until);
         return { kind: "limited", until: verdict.until };
       }
       if (res.status === 304 && entry) {
         this.deps.cache.touch(key, now);
-        return { kind: "ok", response: this.fromEntry(entry, "revalidated", source) };
+        return { kind: "ok", response: this.fromEntry(entry, "revalidated", cred.source, cred) };
       }
       if (res.status >= 400) throw new ProxyError("http", httpMessage(res.status, text), res.status);
 
@@ -269,25 +345,32 @@ export class GithubProxy {
       if (p.cacheable) {
         this.deps.cache.set({ key, etag: res.headers.get("etag"), status: res.status, body: text, contentType, link: res.headers.get("link"), fetchedAt: now });
       } else if (p.method !== "GET" && p.classified.repo) {
-        // A write changes what the reads of that repo will say.
+        // A write changes what the reads of that repo will say, whoever asked.
         this.deps.cache.invalidate(`/repos/${p.classified.repo}`);
       }
-      return { kind: "ok", response: { status: res.status, data: parseBody(text, contentType), served: "upstream", link: res.headers.get("link"), source } };
+      return { kind: "ok", response: { status: res.status, data: parseBody(text, contentType), served: "upstream", link: res.headers.get("link"), source: cred.source, app: cred.app } };
     }
-    throw new ProxyError("auth", "GitHub rejected the credentials (HTTP 401). Ask the user to check GitHub Proxy → Auth.", 401);
+    throw new ProxyError("auth", `GitHub rejected the credentials of the ${cred.label} (HTTP 401). Ask the user to check GitHub Proxy → Auth.`, 401);
   }
 
   overview(): Overview {
     const config = this.deps.config();
     const now = this.clock();
     const warnings: string[] = [];
-    const sources = (["gh", "app"] as const).map((source) => {
-      const limits = this.deps.tracker.limits(source);
-      const blockedUntil = this.deps.tracker.blockedUntil(source);
+    const apps = this.deps.apps.list();
+    const rows = [
+      { source: "gh" as const, key: "gh", label: "gh CLI", owners: [] as string[], default: false, configured: this.deps.gh.configured() as boolean },
+      ...apps.map((a) => ({ source: "app" as const, key: appKey(a.id), label: a.label, owners: a.owners, default: a.default, configured: this.deps.apps.source(a.id).configured() as boolean })),
+      // With no App yet, one placeholder keeps the "GitHub App: not configured" card.
+      ...(apps.length === 0 ? [{ source: "app" as const, key: "app:", label: "GitHub App", owners: [] as string[], default: false, configured: false }] : []),
+    ];
+    const sources = rows.map((r) => {
+      const limits = this.deps.tracker.limits(r.key);
+      const blockedUntil = this.deps.tracker.blockedUntil(r.key);
       for (const l of limits) {
-        if (l.limit > 0 && l.remaining / l.limit <= 0.1 && l.resetAt > now) warnings.push(`${source === "gh" ? "gh CLI" : "GitHub App"}: ${l.resource} is nearly exhausted (${l.remaining}/${l.limit} left).`);
+        if (l.limit > 0 && l.remaining / l.limit <= 0.1 && l.resetAt > now) warnings.push(`${r.source === "gh" ? "gh CLI" : `GitHub App "${r.label}"`}: ${l.resource} is nearly exhausted (${l.remaining}/${l.limit} left).`);
       }
-      return { source, configured: this.deps.sources[source].configured() as boolean, active: config.activeSource === source, blockedUntil, limits };
+      return { ...r, active: config.activeSource === r.source, blockedUntil, limits };
     });
     if (config.allowedOwners.length === 0) warnings.push("No allowed owner yet: every call is refused until you add one in Auth.");
     return { now, sources, stats: this.deps.activity.stats(this.deps.cache.size), allowedOwnersEmpty: config.allowedOwners.length === 0, warnings };

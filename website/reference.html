@@ -78,7 +78,7 @@
 <tr><td>Active source (<code>gh</code> or <code>app</code>)</td><td>Auth</td><td><code>gh</code></td></tr>
 <tr><td>Fall back to the other source on rate limit</td><td>Auth</td><td>off</td></tr>
 <tr><td>Allowed owners</td><td>Auth</td><td><code>*</code> (every owner)</td></tr>
-<tr><td>GitHub App credentials</td><td>Auth</td><td>none</td></tr>
+<tr><td>GitHub Apps (label, App ID, installation ID, owners, default) and their private keys</td><td>Auth</td><td>none</td></tr>
 <tr><td>Preset, default permissions, rules</td><td>Policy</td><td>Read-only, no rules</td></tr>
 <tr><td>Cache TTL in seconds (0 to 3600)</td><td>Policy</td><td>30</td></tr>
 <tr><td>Forbid direct use of gh, curl and raw GitHub</td><td>Policy</td><td>off</td></tr>
@@ -86,10 +86,10 @@
 
 <h2 id="tabs">The page</h2>
 <ul>
-<li><strong>Overview</strong>: remaining and limit per credential source and resource, a reset countdown, a requests-per-minute chart, the cache hit rate, and banners when a limit is nearly or fully used up or no owner is allowed.</li>
-<li><strong>Auth</strong>: source choice, gh check, App credentials form, fallback toggle, allowed owners.</li>
+<li><strong>Overview</strong>: remaining and limit per credential (gh and each GitHub App) and resource, a reset countdown, a requests-per-minute chart, the cache hit rate, and banners when a limit is nearly or fully used up or no owner is allowed.</li>
+<li><strong>Auth</strong>: source choice, gh check, the list of GitHub Apps (add, edit, remove, owners, default, test connection), fallback toggle, allowed owners.</li>
 <li><strong>Policy</strong>: presets, default permissions, rules, the dry-run box, the soft rule, the cache TTL.</li>
-<li><strong>Activity</strong>: a live log of calls per agent: tool, repository, allowed, cached, revalidated, denied or failed, HTTP status, source and duration. Tap a row for the full message.</li>
+<li><strong>Activity</strong>: a live log of calls per agent: tool, repository, allowed, cached, revalidated, denied or failed, HTTP status, the source (and the App that served it) and duration. Tap a row for the full message.</li>
 </ul>
 
 <h2 id="files">Files</h2>

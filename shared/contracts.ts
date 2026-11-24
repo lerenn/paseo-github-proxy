@@ -9,7 +9,7 @@ export const overviewRpc = defineRpc({ name: "github-proxy.overview", input: z.o
 export const configGetRpc = defineRpc({
   name: "github-proxy.config.get",
   input: z.object({}),
-  output: z.object({ config: configSchema, app: appCredentialsViewSchema }),
+  output: z.object({ config: configSchema, apps: z.array(appCredentialsViewSchema) }),
 });
 
 export const configSaveRpc = defineRpc({
@@ -18,17 +18,26 @@ export const configSaveRpc = defineRpc({
   output: z.object({ config: configSchema }),
 });
 
+/** Adds a GitHub App (no `id`) or edits one. An empty `privateKey` keeps the stored key. */
 export const appCredentialsSaveRpc = defineRpc({
   name: "github-proxy.app.save",
-  input: z.object({ appId: z.string(), installationId: z.string(), privateKey: z.string() }),
-  output: z.object({ app: appCredentialsViewSchema }),
+  input: z.object({
+    id: z.string().default(""),
+    label: z.string(),
+    appId: z.string(),
+    installationId: z.string(),
+    owners: z.array(z.string()).default([]),
+    default: z.boolean().default(false),
+    privateKey: z.string().default(""),
+  }),
+  output: z.object({ apps: z.array(appCredentialsViewSchema), id: z.string() }),
 });
 
-export const appCredentialsClearRpc = defineRpc({ name: "github-proxy.app.clear", input: z.object({}), output: z.object({ app: appCredentialsViewSchema }) });
+export const appCredentialsClearRpc = defineRpc({ name: "github-proxy.app.clear", input: z.object({ id: z.string() }), output: z.object({ apps: z.array(appCredentialsViewSchema) }) });
 
 export const sourceCheckRpc = defineRpc({
   name: "github-proxy.source.check",
-  input: z.object({ source: z.enum(["gh", "app"]) }),
+  input: z.object({ source: z.enum(["gh", "app"]), /** The App to test, for `app`. */ app: z.string().default("") }),
   output: z.object({ ok: z.boolean(), detail: z.string(), account: z.string() }),
 });
 

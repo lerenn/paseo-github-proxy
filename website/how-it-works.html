@@ -33,7 +33,7 @@
 <li><strong>Owner allowlist.</strong> Every owner the call touches must be allowed. A call that cannot be tied to an owner is refused, unless every owner is allowed.</li>
 <li><strong>Policy.</strong> Each needed action is checked. A matching deny rule wins, then an allow rule, then the default permissions. A denial returns a message naming the rule and reason.</li>
 <li><strong>Cache.</strong> A read younger than the TTL is answered locally. An older one is sent with <code>If-None-Match</code>; a <code>304</code> costs no rate limit and restarts the clock.</li>
-<li><strong>Credentials.</strong> The active source is used, then the other if fallback is on. A source that is rate limited is skipped until it resets.</li>
+<li><strong>Credentials.</strong> The active source is used, then the other if fallback is on. With GitHub Apps, the App is chosen by the owner of the call: the App claiming it, else the default App. A credential that is rate limited is skipped until it resets.</li>
 <li><strong>Response.</strong> The rate-limit headers are recorded, the response is cached, a write drops the cached reads of that repository, and the call is added to the activity log.</li>
 </ol>
 
@@ -41,7 +41,7 @@
 <p>Entries are keyed by method, URL and request body, kept in memory and in <code>cache.json</code> so they survive a restart, and trimmed oldest-used first (500 entries or about 25 MB). Reads are served locally for the TTL (30 seconds by default, 0 to 3600, set in the Policy tab). Past it, the saved ETag is sent. GraphQL queries have no ETag, so they are cached by TTL only; mutations are never cached.</p>
 
 <h2 id="limits">Rate limits</h2>
-<p>The plugin tracks <code>x-ratelimit-*</code> per credential source and per resource (<code>core</code>, <code>graphql</code>, <code>search</code>). A source is blocked until its reset when a response says the limit is exhausted, carries <code>retry-after</code>, or reports a secondary limit. With nothing left to try, the agent gets a cached answer marked as stale when one exists, and otherwise an error such as <em>Retry at 14:07 (in about 12 min)</em>. The Overview tab shows the remaining count, a live countdown, and a warning when a limit is nearly used up.</p>
+<p>The plugin tracks <code>x-ratelimit-*</code> per credential (the gh CLI and each GitHub App) and per resource (<code>core</code>, <code>graphql</code>, <code>search</code>). A credential is blocked until its reset (the other Apps keep working) when a response says the limit is exhausted, carries <code>retry-after</code>, or reports a secondary limit. With nothing left to try, the agent gets a cached answer marked as stale when one exists, and otherwise an error such as <em>Retry at 14:07 (in about 12 min)</em>. The Overview tab shows the remaining count, a live countdown, and a warning when a limit is nearly used up.</p>
 
 <h2 id="policy">Policy</h2>
 <p>A policy is a default list of allowed actions (from a preset, read-only by default) plus ordered rules. See the <a href="reference.html#policy">reference</a> for the actions and how generic calls are classified. The generic <code>github_api</code> tool can never bypass a rule: a merge through it needs both <code>merge</code> and <code>generic_api_write</code>.</p>
@@ -50,10 +50,11 @@
 <table>
 <tr><th>File</th><th>Contents</th></tr>
 <tr><td><code>config.json</code></td><td>Active source, fallback, allowed owners, TTL, soft rule, policy.</td></tr>
-<tr><td><code>secrets.json</code> (0600)</td><td>The GitHub App ID, installation ID and private key.</td></tr>
-<tr><td><code>cache.json</code></td><td>Cached GitHub responses.</td></tr>
+<tr><td><code>apps.json</code></td><td>The GitHub Apps: label, App ID, installation ID, owners, default flag. No secret.</td></tr>
+<tr><td><code>secrets.json</code> (0600)</td><td>The private key of each GitHub App.</td></tr>
+<tr><td><code>cache.json</code></td><td>Cached GitHub responses, kept per credential so an answer is never shared between Apps.</td></tr>
 </table>
-<p>All three are in <code>$PASEO_HOME/plugin-data/lerenn/paseo-github-proxy/</code>. The activity log and counters live in memory and reset when the plugin restarts.</p>
+<p>All four are in <code>$PASEO_HOME/plugin-data/lerenn/paseo-github-proxy/</code>. The activity log and counters live in memory and reset when the plugin restarts.</p>
 
 <h2 id="limits-known">Limits</h2>
 <ul>

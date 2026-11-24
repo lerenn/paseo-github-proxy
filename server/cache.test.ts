@@ -16,8 +16,12 @@ describe("cache", () => {
     expect(isFresh(e, 0, 1000)).toBe(false);
   });
   it("keys differ by body", () => {
-    expect(cacheKey("POST", "u", "a")).not.toBe(cacheKey("POST", "u", "b"));
-    expect(cacheKey("get", "u")).toBe("GET u");
+    expect(cacheKey("POST", "u", "a", "gh")).not.toBe(cacheKey("POST", "u", "b", "gh"));
+    expect(cacheKey("get", "u", undefined, "gh")).toBe("GET u as gh");
+  });
+  it("keys differ by credential identity, so an answer is never shared across Apps or with gh", () => {
+    const keys = ["gh", "app:a", "app:b"].map((i) => cacheKey("GET", "https://api.github.com/repos/o/r", undefined, i));
+    expect(new Set(keys).size).toBe(3);
   });
   it("evicts the least recently used entry", () => {
     const c = new ResponseCache(null, 2);

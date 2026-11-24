@@ -12,6 +12,7 @@ import {
   overviewRpc,
   sourceCheckRpc,
 } from "./shared/contracts";
+import { appKey } from "./server/apps";
 import { discoverOwners, discoverRepos } from "./server/discovery";
 import { createRuntime } from "./server/runtime";
 import { buildTools, SOFT_RULE_METADATA_KEY, SOFT_RULE_PROMPT, withSoftRule } from "./server/tools";
@@ -56,29 +57,32 @@ export default function contribute(server: PluginServerContext) {
   });
 
   server.handle(overviewRpc, () => rt.proxy.overview());
-  server.handle(configGetRpc, () => ({ config: rt.store.get(), app: rt.store.credentialsView() }));
+  server.handle(configGetRpc, () => ({ config: rt.store.get(), apps: rt.store.appViews() }));
   server.handle(configSaveRpc, ({ config }) => ({ config: rt.store.set(config) }));
   server.handle(appCredentialsSaveRpc, (input) => {
-    rt.store.setAppCredentials(input);
-    rt.app.invalidate();
-    rt.tracker.clear("app");
-    return { app: rt.store.credentialsView() };
+    const id = rt.store.saveApp(input);
+    rt.apps.forget(id);
+    rt.tracker.clear(appKey(id));
+    return { apps: rt.store.appViews(), id };
   });
-  server.handle(appCredentialsClearRpc, () => {
-    rt.store.clearAppCredentials();
-    rt.app.invalidate();
-    return { app: rt.store.credentialsView() };
+  server.handle(appCredentialsClearRpc, ({ id }) => {
+    rt.store.removeApp(id);
+    rt.apps.forget(id);
+    rt.tracker.clear(appKey(id));
+    return { apps: rt.store.appViews() };
   });
-  server.handle(sourceCheckRpc, async ({ source }) => {
+  server.handle(sourceCheckRpc, async ({ source, app }) => {
     if (source === "gh") {
       rt.gh.invalidate();
       const status = await rt.gh.status();
       return { ok: status.ok, detail: status.detail, account: status.user };
     }
+    const entry = rt.store.apps().find((a) => a.id === app);
+    if (!entry) return { ok: false, detail: "That GitHub App is not saved yet. Save it first.", account: "" };
     try {
-      rt.app.invalidate();
-      await rt.app.token();
-      return { ok: true, detail: "GitHub accepted the App credentials and issued an installation token.", account: `App ${rt.store.credentialsView().appId}` };
+      rt.apps.forget(entry.id);
+      await rt.apps.source(entry.id).token();
+      return { ok: true, detail: "GitHub accepted the App credentials and issued an installation token.", account: `${entry.label} (App ${entry.appId})` };
     } catch (error) {
       return { ok: false, detail: (error as Error).message, account: "" };
     }
@@ -89,12 +93,13 @@ export default function contribute(server: PluginServerContext) {
     else rt.activity.clear();
     return { ok: true };
   });
-  const lookup = (path: string, query?: Record<string, string | number>) => rt.proxy.lookup(path, query);
-  server.handle(discoverOwnersRpc, () => discoverOwners(lookup, rt.store.get().activeSource));
+  const lookup = (path: string, query?: Record<string, string | number>, via?: { app: string }) => rt.proxy.lookup(path, query, via);
+  server.handle(discoverOwnersRpc, () => discoverOwners(lookup, rt.store.get().activeSource, rt.store.apps()));
   server.handle(discoverReposRpc, async () => {
     const config = rt.store.get();
-    const { owners } = config.allowedOwners.includes("*") ? await discoverOwners(lookup, config.activeSource) : { owners: [] };
-    return discoverRepos(lookup, config, owners);
+    const apps = rt.store.apps();
+    const { owners } = config.allowedOwners.includes("*") ? await discoverOwners(lookup, config.activeSource, apps) : { owners: [] };
+    return discoverRepos(lookup, config, owners, apps);
   });
   server.handle(dryRunRpc, ({ kind, method, path, query, repo }) =>
     rt.proxy.dryRun(kind === "graphql" ? { kind, query, repo } : { kind, method, path }),

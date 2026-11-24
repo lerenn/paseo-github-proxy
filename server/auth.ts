@@ -106,6 +106,7 @@ export class AppSource implements TokenSource {
     private readonly fetchFn: FetchFn,
     private readonly clock: () => number = Date.now,
     private readonly apiBase = "https://api.github.com",
+    private readonly label: () => string = () => "The GitHub App",
   ) {}
 
   configured(): boolean {
@@ -127,59 +128,57 @@ export class AppSource implements TokenSource {
 
   private async refresh(): Promise<string> {
     const c = this.credentials();
-    if (!c || !this.configured()) throw new AuthError("The GitHub App credentials are not configured.");
+    if (!c || !this.configured()) throw new AuthError(`${this.label()}: the credentials are not configured.`);
     let jwt: string;
     try {
       jwt = createAppJwt(c.appId, c.privateKey, this.clock());
     } catch {
-      throw new AuthError("The GitHub App private key is not a valid PEM key.");
+      throw new AuthError(`${this.label()}: the private key is not a valid PEM key.`);
     }
     const response = await this.fetchFn(`${this.apiBase}/app/installations/${encodeURIComponent(c.installationId)}/access_tokens`, {
       method: "POST",
       headers: { Authorization: `Bearer ${jwt}`, Accept: "application/vnd.github+json", "User-Agent": "paseo-github-proxy" },
     });
     const text = await response.text();
-    if (response.status !== 201) throw new AuthError(`GitHub refused the App credentials (HTTP ${response.status}). Check the App ID, installation id and key.`);
+    if (response.status !== 201) throw new AuthError(`${this.label()}: GitHub refused the App credentials (HTTP ${response.status}). Check the App ID, installation id and key.`);
     const parsed = JSON.parse(text) as { token?: string; expires_at?: string };
-    if (!parsed.token) throw new AuthError("GitHub returned no installation token.");
+    if (!parsed.token) throw new AuthError(`${this.label()}: GitHub returned no installation token.`);
     this.cached = { token: parsed.token, expiresAt: parsed.expires_at ? Date.parse(parsed.expires_at) : this.clock() + 3_600_000 };
     return parsed.token;
   }
 }
 
+export interface SourceCandidate {
+  /** Credential identity: `gh` or `app:<id>`. */
+  key: string;
+  configured: boolean;
+}
+
 export interface SourceChoice {
-  /** Sources to try, in order. */
-  order: SourceId[];
+  /** Credential keys to try, in order. */
+  order: string[];
   /** Set when none can be used right now. */
-  blocked?: { reason: "unconfigured" | "rate_limited"; until?: number; source: SourceId };
+  blocked?: { reason: "unconfigured" | "rate_limited"; until?: number; key: string };
 }
 
 /**
- * Picks the sources to use for a call: the active one first, then the other only when fallback is on.
- * A source that is not configured or is rate-limited for the resource is skipped.
+ * Picks the credentials to use for a call from the candidates the caller built (the active one first, then the
+ * fallback only when it is on). A candidate that is not configured or is rate-limited for the resource is skipped.
  */
-export function chooseSources(input: {
-  active: SourceId;
-  fallback: boolean;
-  configured: Record<SourceId, boolean>;
-  tracker: RateLimitTracker;
-  resource: string;
-}): SourceChoice {
-  const other: SourceId = input.active === "gh" ? "app" : "gh";
-  const candidates: SourceId[] = input.fallback ? [input.active, other] : [input.active];
-  const order: SourceId[] = [];
+export function chooseSources(input: { candidates: SourceCandidate[]; tracker: RateLimitTracker; resource: string }): SourceChoice {
+  const order: string[] = [];
   let blocked: SourceChoice["blocked"];
-  for (const source of candidates) {
-    if (!input.configured[source]) {
-      blocked ??= { reason: "unconfigured", source };
+  for (const { key, configured } of input.candidates) {
+    if (!configured) {
+      blocked ??= { reason: "unconfigured", key };
       continue;
     }
-    const until = input.tracker.blockedUntil(source, input.resource);
+    const until = input.tracker.blockedUntil(key, input.resource);
     if (until !== null) {
-      if (!blocked || blocked.reason === "unconfigured" || (blocked.until ?? Infinity) > until) blocked = { reason: "rate_limited", until, source };
+      if (!blocked || blocked.reason === "unconfigured" || (blocked.until ?? Infinity) > until) blocked = { reason: "rate_limited", until, key };
       continue;
     }
-    order.push(source);
+    order.push(key);
   }
   return order.length ? { order } : { order, blocked };
 }

@@ -5,7 +5,7 @@ A [Paseo](https://paseo.sh) plugin that gives every agent policy-controlled, cac
 - **One front door.** The `github_*` tools are added to every agent automatically.
 - **Read-only by default.** You enable writes, per action and per repository.
 - **Fewer API calls.** A shared in-memory and on-disk cache with ETag revalidation, so many agents asking the same thing cost one request.
-- **Rate limits handled.** Live remaining/limit per credential source, a "retry at HH:MM" error to the agent when exhausted, optional fallback to the other credential source.
+- **Rate limits handled.** Live remaining/limit per credential source, a "retry at HH:MM" error to the agent when exhausted, one limit per GitHub App, optional fallback to the other credential source.
 - **Clear denials.** The agent is told which rule denied a call and why, so it stops retrying.
 - **A full-screen page** (sidebar → GitHub Proxy) with Overview, Auth, Policy and Activity tabs.
 
@@ -27,7 +27,7 @@ Then open **GitHub Proxy** in the sidebar (or Command Center → "Open GitHub Pr
 
 **Local `gh` CLI.** Run `gh auth login` on the machine where the Paseo daemon runs, then press **Check gh** in the Auth tab. The plugin reads the token with `gh auth token` (cached for five minutes) and stores nothing.
 
-**GitHub App.** Create an App with the permissions you need (for the PR workflow: Contents, Pull requests, Issues, Checks and Metadata read; write where you want writes), install it on your account or organization, then enter:
+**GitHub Apps.** A GitHub App is installed by one account, so one App cannot serve both an organization and a user: add one App per owner. Create each App with the permissions you need (for the PR workflow: Contents, Pull requests, Issues, Checks and Metadata read; write where you want writes), install it on your account or organization, then enter:
 
 | Field | Where to find it |
 | --- | --- |
@@ -37,11 +37,15 @@ Then open **GitHub Proxy** in the sidebar (or Command Center → "Open GitHub Pr
 
 The key is write-only: it is saved to `secrets.json` (mode `0600`) in the plugin's data directory (`$PASEO_HOME/plugin-data/lerenn/paseo-github-proxy`), never written to `config.json`, never logged, and never sent back to the app (the UI only sees a short fingerprint). Paseo has no secret vault for plugins, so this file is the protection: keep the daemon's home private.
 
-Pick **one active source**. Optionally turn on **Fall back to the other source on rate limit**.
+Each App has a **label**, the three fields above, the **owners it serves** (a checkable dropdown) and a **Default App** switch. The default App serves every allowed owner that no other App claims, and calls that name no owner. An owner belongs to one App only. **Test connection** asks GitHub for an installation token for that App. Each App keeps its own installation token, its own rate limit (shown per App in Overview) and its own cache entries; the Activity tab shows which App served each call.
+
+Pick **one active source**: the `gh` CLI, or the GitHub Apps (each call then uses the App of its owner). Optionally turn on **Fall back to the other source on rate limit**. If an owner has no App (and there is no default App), the agent is told that no App serves that owner and not to retry, unless the fallback lets `gh` answer.
+
+Upgrading: a single App saved by an earlier version becomes one **default** App labelled "GitHub App" on first start, with its key moved to the new secrets layout; nothing needs to be re-entered.
 
 ### 2. Allow owners (Auth tab)
 
-Open the **Allowed owners** dropdown and check the GitHub users and organizations agents may act on. The list comes from the active source (the gh user and their organizations, or the account the App is installed on); type a name to add one that is not listed. Checking **All owners (`*`)** clears the others. This is a safety net on top of the policy. The default is `*`, which allows every owner; replace it with specific owners to restrict agents. **If you clear the list, every call is refused.**
+Open the **Allowed owners** dropdown and check the GitHub users and organizations agents may act on. The list comes from the active source (the gh user and their organizations, or the accounts the Apps are installed on, each App asked in turn); type a name to add one that is not listed. Checking **All owners (`*`)** clears the others. This is a safety net on top of the policy. The default is `*`, which allows every owner; replace it with specific owners to restrict agents. **If you clear the list, every call is refused.**
 
 ### 3. Set the policy (Policy tab)
 
@@ -91,9 +95,9 @@ The same tab holds the **cache TTL** (30 s by default) and the **Forbid direct u
 
 1. Owner allowlist, then policy (denials name the rule and reason).
 2. Cache: fresh within the TTL → served locally. Otherwise a conditional request with `If-None-Match`; a `304` costs no rate limit and restarts the clock.
-3. Auth source: the active one, then the other if fallback is on. A source that is rate limited is skipped until its reset.
-4. Rate limit: `x-ratelimit-*` headers are tracked per source and resource (`core`, `graphql`, `search`). A primary limit, a `retry-after` or a secondary-limit response blocks the source until the reset. With nothing left to try, a cached answer is served stale, or the agent receives `Retry at HH:MM`.
-5. Writes invalidate the cached reads of that repository.
+3. Auth source: the active one, then the other if fallback is on. With Apps, the App is chosen by the owner of the call (the App claiming it, else the default App); a call spanning owners of two Apps is refused. A credential that is rate limited is skipped until its reset.
+4. Rate limit: `x-ratelimit-*` headers are tracked per credential (the `gh` CLI and each App) and resource (`core`, `graphql`, `search`). A primary limit, a `retry-after` or a secondary-limit response blocks that credential until the reset; the other Apps are not affected. With nothing left to try, a cached answer is served stale, or the agent receives `Retry at HH:MM`.
+5. Writes invalidate the cached reads of that repository. Cached answers are keyed by credential (`gh` or the App), so an answer fetched with one identity is never served to another.
 
 ## Website
 
