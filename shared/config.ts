@@ -30,6 +30,8 @@ export const configSchema = z.object({
   allowedOwners: z.array(z.string()).default(["*"]),
   cacheTtlSeconds: z.number().int().min(0).max(3600).default(30),
   forbidRawGithub: z.boolean().default(false),
+  /** The hard rule: deny permission requests for gh, and curl or wget aimed at GitHub. Off by default. */
+  blockRawGithub: z.boolean().default(false),
   policy: policySchema.default({ preset: "read_only", defaultAllow: [...PRESET_INFO.read_only.allow], rules: [] }),
 });
 export type Config = z.infer<typeof configSchema>;

@@ -69,6 +69,8 @@ Actions: `read`, `comment`, `review`, `create_issue`, `create_pr`, `update_pr`, 
 
 The same tab holds the **cache TTL** (30 s by default) and the **Forbid direct use of gh/curl/raw GitHub** checkbox, which adds an instruction to every agent's system prompt and tool descriptions to use the `github_*` tools. It is a soft rule, not a sandbox. The instruction says the `github_*` tools win over a project AGENTS.md that allows `gh`, unless you explicitly ask for `gh`. On Paseo 0.16 it is saved in the system prompt when an agent is created, so only agents created after you turn it on get it; from 0.17 it is also added each time a session opens.
 
+The **Block gh/curl commands (hard)** checkbox (off by default) goes further than the soft rule: when an agent asks permission to run a shell command that runs `gh`, or `curl` or `wget` against github.com, api.github.com or githubusercontent.com, the plugin denies the request with a message that points to the `github_*` tools and says not to retry. It matches command words after pipes, `&&`, `;`, subshells, env prefixes, `sudo` and `bash -c`, so `git` and `grep gh` pass. Denials appear in the Activity tab as `hard rule`. Its limits: it only sees commands the agent raises a permission request for, so an agent in a bypass or auto-approve mode never triggers it; it is pattern matching, not a sandbox, so a script file or a command built at run time gets through. For a real block, add network or egress rules on the daemon machine.
+
 ## Tools
 
 | Tool | Action |
@@ -118,5 +120,6 @@ Tests mock GitHub and `gh`; no network and no real credentials are used. See [AG
 
 - Plugin tools reach agents through Paseo's agent-tool mechanism (`defineAgentTool`), which Paseo exposes to the agent as MCP tools.
 - The soft rule cannot stop an agent that has a shell from running `gh`; it is an instruction.
+- The hard rule only sees permission requests (nothing in bypass mode) and matches command text; it is not a sandbox. Block egress to GitHub on the daemon machine for a real block.
 - GraphQL scoping is best effort: it checks the repo you pass and `owner:` literals in the query; node-ID queries are refused unless every owner is allowed.
 - Activity and counters are in memory (reset on plugin restart); config and cache persist.

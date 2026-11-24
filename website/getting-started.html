@@ -69,6 +69,9 @@ Rule 2  allow  lerenn/*      merge</code></pre>
 <h2 id="soft">Optional: steer agents away from gh and curl</h2>
 <p>In <strong>Policy → Behaviour</strong>, turn on <strong>Forbid direct use of gh, curl and raw GitHub</strong>. An instruction is added to every agent's system prompt and to each tool description telling it to use the <code>github_*</code> tools. It is a soft rule, not a sandbox, and wins over a project file that allows gh, unless you ask for gh. On Paseo 0.16 it reaches agents created after you turn it on; from 0.17 also any session opened afterwards.</p>
 
+<h2 id="hard">Optional: block gh and curl commands</h2>
+<p>In <strong>Policy → Behaviour</strong>, turn on <strong>Block gh/curl commands (hard)</strong>. When an agent asks permission to run a shell command that runs <code>gh</code>, or <code>curl</code> or <code>wget</code> against GitHub, the plugin denies it and tells the agent to use the <code>github_*</code> tools. It only sees commands the agent asks permission for (an agent in a bypass mode never asks), and it matches command text, so a script file or a command built at run time gets through. For a real block, add network rules on the daemon machine. Denials show in the Activity tab.</p>
+
 </main>
 <footer class="site"><div class="inner">Paseo GitHub Proxy is a plugin for <a href="https://paseo.sh">Paseo</a>. Source on <a href="https://github.com/lerenn/paseo-github-proxy">GitHub</a>.</div></footer>
 </body>

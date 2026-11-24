@@ -14,6 +14,7 @@ import {
 } from "./shared/contracts";
 import { appKey } from "./server/apps";
 import { discoverOwners, discoverRepos } from "./server/discovery";
+import { createHardRuleHandler } from "./server/hardrule";
 import { createRuntime } from "./server/runtime";
 import { buildTools, SOFT_RULE_METADATA_KEY, SOFT_RULE_PROMPT, withSoftRule } from "./server/tools";
 
@@ -54,6 +55,19 @@ export default function contribute(server: PluginServerContext) {
       tools: [...request.tools, ...buildTools({ proxy: rt.proxy, softRule: forbidRawGithub })],
       ...(forbidRawGithub && !saved ? { appendSystemPrompt: [...hostAppend(request), SOFT_RULE_PROMPT] } : {}),
     };
+  });
+
+  // The hard rule: a Bash permission request that runs gh, or curl/wget at GitHub, is denied. Only requests the agent
+  // raises reach this hook (an agent in bypass mode raises none), and it matches command words; it is not a sandbox.
+  const hardRule = createHardRuleHandler({ enabled: () => rt.store.get().blockRawGithub, log: (entry) => rt.activity.add(entry) });
+  server.addHook("agent.permission.before", async (event, context) => {
+    try {
+      await hardRule(event, (message) =>
+        context.paseo.agents.ref(event.agent.id).respondToPermission({ requestId: event.request.id, response: { behavior: "deny", message } }),
+      );
+    } catch (error) {
+      console.error("[github-proxy] hard rule failed:", error);
+    }
   });
 
   server.handle(overviewRpc, () => rt.proxy.overview());

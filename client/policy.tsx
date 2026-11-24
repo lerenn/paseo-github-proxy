@@ -171,6 +171,13 @@ export function PolicyTab({ theme, data }: { theme: Theme; data: ConfigData }) {
           label="Forbid direct use of gh, curl and raw GitHub"
           hint="Adds an instruction to every agent's system prompt and to each github_* tool description: use these tools instead of gh or curl. A soft rule, not a sandbox. It reaches agents created after you turn it on (and, on Paseo 0.17 or later, sessions opened afterwards)."
         />
+        <Toggle
+          theme={theme}
+          value={config.blockRawGithub}
+          onChange={(v) => data.change((c) => ({ ...c, blockRawGithub: v }))}
+          label="Block gh/curl commands (hard)"
+          hint="Denies a permission request for a shell command that runs gh, or curl or wget against github.com, and tells the agent to use the github_* tools. It only sees commands the agent asks permission for: an agent in a bypass or auto-approve mode never asks, so nothing is blocked there. It matches command words, it is not a sandbox: a script file or a command built at run time gets through. For a real block, add network or egress rules on the daemon machine."
+        />
         <Field
           theme={theme}
           label="Cache TTL (seconds)"

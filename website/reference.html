@@ -82,13 +82,14 @@
 <tr><td>Preset, default permissions, rules</td><td>Policy</td><td>Read-only, no rules</td></tr>
 <tr><td>Cache TTL in seconds (0 to 3600)</td><td>Policy</td><td>30</td></tr>
 <tr><td>Forbid direct use of gh, curl and raw GitHub</td><td>Policy</td><td>off</td></tr>
+<tr><td>Block gh/curl commands (hard)</td><td>Policy</td><td>off</td></tr>
 </table>
 
 <h2 id="tabs">The page</h2>
 <ul>
 <li><strong>Overview</strong>: remaining and limit per credential (gh and each GitHub App) and resource, a reset countdown, a requests-per-minute chart, the cache hit rate, and banners when a limit is nearly or fully used up or no owner is allowed.</li>
 <li><strong>Auth</strong>: source choice, gh check, the list of GitHub Apps (add, edit, remove, organization, also-serves owners, default, test connection), fallback toggle, allowed owners.</li>
-<li><strong>Policy</strong>: presets, default permissions, rules, the dry-run box, the soft rule, the cache TTL.</li>
+<li><strong>Policy</strong>: presets, default permissions, rules, the dry-run box, the soft and hard rules, the cache TTL.</li>
 <li><strong>Activity</strong>: a live log of calls per agent: tool, repository, allowed, cached, revalidated, denied or failed, HTTP status, the source (and the App that served it) and duration. Tap a row for the full message.</li>
 </ul>
 

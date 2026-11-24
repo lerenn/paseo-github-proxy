@@ -18,6 +18,8 @@ Open GitHub Proxy from the sidebar.
 
 An optional setting adds an instruction to every agent's system prompt and tool descriptions to use these tools instead of `gh` or `curl`. It is a soft rule: an agent with a shell can still run `gh`.
 
+A second, optional setting (the hard rule) denies permission requests for shell commands that run `gh`, or `curl` or `wget` against GitHub, and tells the agent to use these tools. It only applies when the agent asks for permission (an agent in a bypass mode never does) and it matches command text, so it is not a sandbox. A real block needs network rules on the machine that runs the daemon.
+
 ## Good to know
 
 - Needs Paseo 0.16.2 or later.
