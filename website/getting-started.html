@@ -26,7 +26,7 @@
 <ul>
 <li>Paseo 0.16.2 or later (the plugin declares <code>&gt;=0.16.2</code>).</li>
 <li>Plugins enabled on the daemon: Settings → Plugins → Enable plugins, or <code>pluginsEnabled: true</code> in the daemon's <code>config.json</code>.</li>
-<li>For the <code>gh</code> source: the GitHub CLI installed and logged in on the daemon machine. For the App source: a GitHub App installed on your account or organization.</li>
+<li>For the <code>gh</code> source: the GitHub CLI installed and logged in on the daemon machine. For the App source: a GitHub App installed on each account or organization you want to reach.</li>
 </ul>
 <div class="note warn">Plugins are trusted, unsandboxed code. The server part runs on the daemon machine, runs <code>gh</code> when you choose that source, and stores the App private key there.</div>
 
@@ -39,16 +39,19 @@
 <h3 id="gh">Local gh CLI</h3>
 <pre><code>gh auth login</code></pre>
 <p>Run it on the machine where the Paseo daemon runs, then press <strong>Check gh</strong>. The plugin reads the token with <code>gh auth token</code> and keeps it for five minutes. It stores nothing.</p>
-<h3 id="app">GitHub App</h3>
-<p>Create a GitHub App with the permissions you need (for the PR workflow: Contents, Pull requests, Issues and Checks, plus Metadata read; write only where you want writes) and install it. Then enter:</p>
+<h3 id="app">GitHub Apps</h3>
+<p>A GitHub App is installed by one account, so one App cannot serve both an organization and a user: add one App per owner. Create each GitHub App with the permissions you need (for the PR workflow: Contents, Pull requests, Issues and Checks, plus Metadata read; write only where you want writes) and install it. Then press <strong>Add a GitHub App</strong> and enter:</p>
 <table>
 <tr><th>Field</th><th>Where to find it</th></tr>
+<tr><td>Label</td><td>A name you choose, shown in Overview and Activity.</td></tr>
 <tr><td>App ID</td><td>The App's settings page.</td></tr>
 <tr><td>Installation ID</td><td>The number at the end of the installation URL, <code>/settings/installations/&lt;id&gt;</code>.</td></tr>
 <tr><td>Private key</td><td>Generate one on the App's settings page and paste the PEM.</td></tr>
+<tr><td>Owners</td><td>The users or organizations this App serves, in a checkable dropdown. An owner belongs to one App only.</td></tr>
+<tr><td>Default App</td><td>Serves every allowed owner that no other App claims, and calls that name no owner.</td></tr>
 </table>
 <div class="note">The key is write-only. It is saved to <code>secrets.json</code> (mode <code>0600</code>) in the plugin's data directory on the daemon machine, never written to the config, never logged, and never sent back to the app: the page only shows a fingerprint. Paseo has no secret vault for plugins, so keep the daemon's home private.</div>
-<p>Press <strong>Test connection</strong>. Optionally turn on <strong>Fall back to the other source on rate limit</strong>: when the active source is exhausted, calls use the other one until its limit resets.</p>
+<p>Each call uses the App that serves its owner, with its own installation token, rate limit and cache entries. If an owner has no App and there is no default, the agent is told which owner is unserved. A single App saved by an earlier version becomes the default App on first start. Press <strong>Test connection</strong> on each App. Optionally turn on <strong>Fall back to the other source on rate limit</strong>: when the active source is exhausted, calls use the other one until its limit resets.</p>
 
 <h2 id="owners">3. Allow owners</h2>
 <p>In <strong>Auth → Allowed owners</strong>, open the dropdown and check the GitHub users and organizations agents may act on. The list comes from the active source; type a name to add one that is not listed. The default <code>*</code> allows every owner; replace it to restrict agents. <strong>If you clear the list, every call is refused.</strong></p>

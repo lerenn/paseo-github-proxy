@@ -13,9 +13,13 @@ export interface CacheEntry {
   fetchedAt: number;
 }
 
-export function cacheKey(method: string, url: string, body?: string): string {
+/**
+ * The key of a response. It includes the credential identity (`gh` or `app:<id>`): what GitHub answers depends on who
+ * asks (a private repository is visible to one App and not to another), so an answer is never shared across identities.
+ */
+export function cacheKey(method: string, url: string, body: string | undefined, identity: string): string {
   const suffix = body ? `#${createHash("sha256").update(body).digest("hex").slice(0, 16)}` : "";
-  return `${method.toUpperCase()} ${url}${suffix}`;
+  return `${method.toUpperCase()} ${url}${suffix} as ${identity}`;
 }
 
 export function isFresh(entry: CacheEntry, ttlSeconds: number, now: number): boolean {

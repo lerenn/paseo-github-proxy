@@ -42,12 +42,30 @@ export function presetPolicy(preset: "read_only" | "pr_workflow" | "full", rules
   return { preset, defaultAllow: [...PRESET_INFO[preset].allow] as Action[], rules };
 }
 
-/** What the client may know about the GitHub App credentials: never the key itself. */
-export const appCredentialsViewSchema = z.object({
-  configured: z.boolean(),
+/** One GitHub App: its identity and the owners it serves. The private key is not here: it lives in `secrets.json`. */
+export const appEntrySchema = z.object({
+  /** Stable slug, kept when the label changes. */
+  id: z.string(),
+  label: z.string(),
   appId: z.string(),
   installationId: z.string(),
+  /** Lower-cased owners (users or orgs) this App serves. */
+  owners: z.array(z.string()).default([]),
+  /** The default App serves every allowed owner that no other App claims. */
+  default: z.boolean().default(false),
+});
+export type AppEntry = z.infer<typeof appEntrySchema>;
+
+/** What the client may know about one GitHub App: never the key itself. */
+export const appCredentialsViewSchema = appEntrySchema.extend({
+  configured: z.boolean(),
   /** Short fingerprint of the private key, to tell two keys apart. */
   keyFingerprint: z.string(),
 });
 export type AppCredentialsView = z.infer<typeof appCredentialsViewSchema>;
+
+/** The App that serves an owner: the one claiming it, else the default one. Null when none does. */
+export function resolveApp(apps: AppEntry[], owner: string): AppEntry | null {
+  const o = owner.trim().toLowerCase();
+  return (o ? apps.find((a) => a.owners.includes(o)) : undefined) ?? apps.find((a) => a.default) ?? null;
+}

@@ -1,4 +1,3 @@
-import type { SourceId } from "../shared/config";
 import type { RateLimitView } from "../shared/state";
 
 export interface HeaderLike {
@@ -40,24 +39,24 @@ export function detectLimit(status: number, headers: HeaderLike, body: string, n
   return none;
 }
 
-/** Remembers the last rate-limit reading per source and resource, and which sources are refused until when. */
+/** Remembers the last rate-limit reading per credential (`gh` or `app:<id>`) and resource, and which credentials are refused until when. */
 export class RateLimitTracker {
   private readings = new Map<string, RateLimitView>();
   private blocks = new Map<string, number>();
 
   constructor(private readonly clock: () => number = Date.now) {}
 
-  record(source: SourceId, view: RateLimitView | null): void {
+  record(source: string, view: RateLimitView | null): void {
     if (view) this.readings.set(`${source}:${view.resource}`, view);
   }
 
   /** Refuse the source (every resource) until the given time. */
-  block(source: SourceId, until: number): void {
+  block(source: string, until: number): void {
     this.blocks.set(source, Math.max(until, this.blocks.get(source) ?? 0));
   }
 
   /** Epoch ms until which the source is refused for the resource, or null if it can be used. */
-  blockedUntil(source: SourceId, resource = "core"): number | null {
+  blockedUntil(source: string, resource = "core"): number | null {
     const now = this.clock();
     const explicit = this.blocks.get(source);
     if (explicit !== undefined && explicit > now) return explicit;
@@ -66,7 +65,7 @@ export class RateLimitTracker {
     return null;
   }
 
-  limits(source: SourceId): RateLimitView[] {
+  limits(source: string): RateLimitView[] {
     const now = this.clock();
     // A window that has reset is full again: show it as such rather than a stale low count.
     return [...this.readings.entries()]
@@ -75,7 +74,7 @@ export class RateLimitTracker {
       .sort((a, b) => a.resource.localeCompare(b.resource));
   }
 
-  clear(source: SourceId): void {
+  clear(source: string): void {
     this.blocks.delete(source);
     for (const key of [...this.readings.keys()]) if (key.startsWith(`${source}:`)) this.readings.delete(key);
   }
@@ -88,7 +87,7 @@ export function resourceOf(path: string): string {
   return "core";
 }
 
-export function limitMessage(source: SourceId, until: number, now: number): string {
+export function limitMessage(label: string, until: number, now: number): string {
   const minutes = Math.max(1, Math.ceil((until - now) / 60_000));
-  return `GitHub rate limit reached for the ${source === "gh" ? "gh CLI" : "GitHub App"} credentials. Retry at ${formatClock(until)} (in about ${minutes} min). Do not retry before then; use cached or already fetched data meanwhile.`;
+  return `GitHub rate limit reached for the ${label} credentials. Retry at ${formatClock(until)} (in about ${minutes} min). Do not retry before then; use cached or already fetched data meanwhile.`;
 }

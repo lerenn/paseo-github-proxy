@@ -16,7 +16,7 @@ export function useActivityData() {
   return useQuery({ queryKey: ["github-proxy", "activity"], queryFn: () => activity({ limit: 200 }), refetchInterval: POLL_MS });
 }
 
-/** The saved config and App credentials view, and a `change` that saves an edit at once (the screen shows it before the save lands). */
+/** The saved config and the GitHub Apps (key fingerprints only), and a `change` that saves an edit at once (the screen shows it before the save lands). */
 export function useConfigData() {
   const get = useRpc(configGetRpc);
   const save = useRpc(configSaveRpc);
@@ -43,36 +43,37 @@ export function useConfigData() {
     client.setQueryData(key, (old: Awaited<ReturnType<typeof get>> | undefined) => (old ? { ...old, config: next } : old));
     mutation.mutate(next);
   };
-  const refreshApp = (app: Awaited<ReturnType<typeof saveApp>>["app"]) => {
-    client.setQueryData(key, (old: Awaited<ReturnType<typeof get>> | undefined) => (old ? { ...old, app } : old));
+  const refreshApps = (apps: Awaited<ReturnType<typeof saveApp>>["apps"]) => {
+    client.setQueryData(key, (old: Awaited<ReturnType<typeof get>> | undefined) => (old ? { ...old, apps } : old));
     void client.invalidateQueries({ queryKey: ["github-proxy", "overview"] });
+    void client.invalidateQueries({ queryKey: ["github-proxy", "owners"] });
   };
   const appSave = useMutation({
     mutationFn: saveApp,
-    onSuccess: ({ app }) => {
-      refreshApp(app);
-      toast.show("GitHub App credentials saved", { variant: "success" });
+    onSuccess: ({ apps }) => {
+      refreshApps(apps);
+      toast.show("GitHub App saved", { variant: "success" });
     },
     onError: (error: Error) => toast.error(error.message),
   });
   const appClear = useMutation({
-    mutationFn: () => clearApp({}),
-    onSuccess: ({ app }) => {
-      refreshApp(app);
-      toast.show("GitHub App credentials removed");
+    mutationFn: (id: string) => clearApp({ id }),
+    onSuccess: ({ apps }) => {
+      refreshApps(apps);
+      toast.show("GitHub App removed");
     },
   });
   const clearData = useMutation({
     mutationFn: (what: "cache" | "activity") => clear({ what }),
     onSuccess: () => void client.invalidateQueries({ queryKey: ["github-proxy"] }),
   });
-  return { config: query.data?.config ?? null, app: query.data?.app ?? null, loading: query.isLoading, error: query.error as Error | null, change, appSave, appClear, clearData };
+  return { config: query.data?.config ?? null, apps: query.data?.apps ?? null, loading: query.isLoading, error: query.error as Error | null, change, appSave, appClear, clearData };
 }
 
-/** Owners the active source can reach (gh user and orgs, or the App installation account). Never throws: a failure becomes `error`. */
-export function useOwnerChoices(source: string) {
+/** Owners the active source can reach (gh user and orgs, or the accounts the Apps are installed on). Never throws: a failure becomes `error`. */
+export function useOwnerChoices(source: string, appCount = 0) {
   const owners = useRpc(discoverOwnersRpc);
-  const q = useQuery({ queryKey: ["github-proxy", "owners", source], queryFn: () => owners({}), staleTime: 60_000, retry: false });
+  const q = useQuery({ queryKey: ["github-proxy", "owners", source, appCount], queryFn: () => owners({}), staleTime: 60_000, retry: false });
   return { owners: q.data?.owners ?? [], error: q.data?.error || (q.error ? (q.error as Error).message : ""), loading: q.isLoading };
 }
 

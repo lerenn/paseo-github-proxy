@@ -19,7 +19,8 @@ function make(config: Partial<Config>, replies: { status: number; body?: unknown
   });
   const proxy = new GithubProxy({
     config: () => cfg,
-    sources: { gh: { id: "gh", configured: () => true, token: async () => "t", invalidate() {} }, app: { id: "app", configured: () => false, token: async () => "", invalidate() {} } },
+    gh: { id: "gh", configured: () => true, token: async () => "t", invalidate() {} },
+    apps: { list: () => [], source: () => ({ id: "app", configured: () => false, token: async () => "", invalidate() {} }) },
     fetch: fetchFn, cache: new ResponseCache(null), tracker: new RateLimitTracker(), activity: new ActivityLog(),
   });
   const tools = buildTools({ proxy, softRule, remoteOf: async () => "git@github.com:acme/web.git" });

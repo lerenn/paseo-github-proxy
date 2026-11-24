@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import contribute from "../index.server";
-import { activityRpc, configGetRpc, configSaveRpc, dryRunRpc, overviewRpc } from "../shared/contracts";
+import { activityRpc, appCredentialsClearRpc, appCredentialsSaveRpc, configGetRpc, configSaveRpc, dryRunRpc, overviewRpc, sourceCheckRpc } from "../shared/contracts";
 import { defaultConfig } from "../shared/config";
 import { SOFT_RULE_METADATA_KEY, SOFT_RULE_PROMPT } from "./tools";
 
@@ -90,7 +90,7 @@ describe("server entry", () => {
     const second = load();
     const got = await second.rpc(configGetRpc);
     expect(got.config).toMatchObject({ allowedOwners: ["acme"], cacheTtlSeconds: 90 });
-    expect(got.app).toEqual({ configured: false, appId: "", installationId: "", keyFingerprint: "" });
+    expect(got.apps).toEqual([]);
   });
 
   it("answers the dry run, the overview and the activity log", async () => {
@@ -100,5 +100,22 @@ describe("server entry", () => {
     expect(await rpc(dryRunRpc, { kind: "rest", method: "GET", path: "/repos/acme/x/pulls" })).toMatchObject({ allowed: true });
     expect((await rpc(overviewRpc)).sources.map((s: { source: string }) => s.source)).toEqual(["gh", "app"]);
     expect(await rpc(activityRpc, { limit: 10 })).toEqual({ entries: [] });
+  });
+
+  it("manages several Apps over RPC and never returns a private key", async () => {
+    const { rpc } = load();
+    const { generateKeyPairSync } = await import("node:crypto");
+    const pem = generateKeyPairSync("rsa", { modulusLength: 2048, privateKeyEncoding: { type: "pkcs8", format: "pem" }, publicKeyEncoding: { type: "spki", format: "pem" } }).privateKey;
+    const a = await rpc(appCredentialsSaveRpc, { label: "Org", appId: "1", installationId: "2", owners: ["acme"], privateKey: pem });
+    await rpc(appCredentialsSaveRpc, { label: "Me", appId: "3", installationId: "4", owners: ["lerenn"], privateKey: pem });
+    expect(JSON.stringify(a)).not.toContain("PRIVATE KEY");
+    const got = await rpc(configGetRpc);
+    expect(got.apps.map((x: { label: string; default: boolean }) => [x.label, x.default])).toEqual([["Org", true], ["Me", false]]);
+    expect(JSON.stringify(got)).not.toContain("PRIVATE KEY");
+    const sources = (await rpc(overviewRpc)).sources.map((s: { key: string }) => s.key);
+    expect(sources).toEqual(["gh", "app:org", "app:me"]);
+    expect((await rpc(sourceCheckRpc, { source: "app", app: "nope" })).ok).toBe(false);
+    const after = await rpc(appCredentialsClearRpc, { id: a.id });
+    expect(after.apps.map((x: { label: string }) => x.label)).toEqual(["Me"]);
   });
 });

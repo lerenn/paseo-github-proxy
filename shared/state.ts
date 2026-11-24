@@ -13,6 +13,12 @@ export type RateLimitView = z.infer<typeof rateLimitSchema>;
 
 export const sourceStatusSchema = z.object({
   source: z.enum(SOURCES),
+  /** Credential identity: `gh`, or `app:<id>` (rate limits and caches are kept per key). */
+  key: z.string(),
+  label: z.string(),
+  /** For an App: the owners it claims, and whether it is the default one. */
+  owners: z.array(z.string()),
+  default: z.boolean(),
   configured: z.boolean(),
   active: z.boolean(),
   /** Set while the source is refused until this epoch ms (a primary or secondary rate limit). */
@@ -35,6 +41,8 @@ export const activityEntrySchema = z.object({
   status: activityStatus,
   httpStatus: z.number().nullable(),
   source: z.enum(SOURCES).nullable(),
+  /** Label of the GitHub App that served the call, when one did. */
+  app: z.string().nullable(),
   detail: z.string(),
   ms: z.number(),
 });
