@@ -1,8 +1,13 @@
-import { execFile } from "node:child_process";
 import { z } from "zod";
-import { defineAgentTool, type AgentToolContext, type AgentToolDefinition, type AgentToolResult } from "@getpaseo/plugin/server";
-import { ACTIONS, ACTION_INFO, type Action } from "../shared/actions";
-import { ProxyError, type GithubProxy, type ProxyResponse } from "./proxy";
+import type { AgentToolDefinition } from "@getpaseo/plugin/server";
+import { ACTIONS, ACTION_INFO } from "../shared/actions";
+import { ProxyError } from "./proxy";
+import { accountTools } from "./tools-account";
+import { prTools } from "./tools-pr";
+import { repoTools } from "./tools-repo";
+import { clip, clipText, createKit, issue, page, pagination, pr, repoField, served, type ToolsDeps } from "./toolkit";
+
+export { repoFromRemote, type ToolsDeps } from "./toolkit";
 
 export const SOFT_RULE_PROMPT =
   "GitHub access: use the github_* tools for every GitHub operation (pull requests, issues, checks, reviews, branches, search, API calls). Do not use the gh CLI, curl, wget or any raw HTTP call to reach api.github.com or other GitHub APIs. " +
@@ -19,82 +24,13 @@ export function withSoftRule(systemPrompt: unknown): string {
 }
 const SOFT_RULE_DESCRIPTION = " Use this instead of the gh CLI or curl.";
 
-const MAX_CHARS = 40_000;
-
-const repoField = z.string().optional().describe("owner/name. Omit to use the repository of your working directory.");
-const page = { page: z.number().int().min(1).optional(), per_page: z.number().int().min(1).max(100).optional().describe("Default 30.") };
-
-const gitRemote = (cwd: string): Promise<string> =>
-  new Promise((resolve) => {
-    execFile("git", ["-C", cwd, "remote", "get-url", "origin"], { timeout: 5000 }, (error, stdout) => resolve(error ? "" : stdout.trim()));
-  });
-
-export function repoFromRemote(url: string): string {
-  const m = /github\.com[:/]+([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/i.exec(url.trim());
-  return m ? `${m[1]}/${m[2]}` : "";
-}
-
-export interface ToolsDeps {
-  proxy: GithubProxy;
-  /** Appends the "use these tools, not gh/curl" sentence to every description. */
-  softRule: boolean;
-  /** Where to find the origin of a working directory; replaceable in tests. */
-  remoteOf?: (cwd: string) => Promise<string>;
-}
-
-function clip(value: unknown): string {
-  const text = typeof value === "string" ? value : JSON.stringify(value, null, 1);
-  return text.length > MAX_CHARS ? `${text.slice(0, MAX_CHARS)}\n… truncated (${text.length - MAX_CHARS} more characters). Narrow the request or use page/per_page.` : text;
-}
-
-function pagination(r: ProxyResponse): string {
-  const next = r.link && /<[^>]*[?&]page=(\d+)[^>]*>;\s*rel="next"/.exec(r.link);
-  return next ? `\n(more results: request page ${next[1]})` : "";
-}
-
-const served = (r: ProxyResponse): string => (r.served === "stale" ? "\n(note: served from an older cache entry because GitHub is rate limiting; it may be out of date)" : "");
+const THREADS_QUERY =
+  "query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { reviewThreads(first: 100) { nodes { id isResolved isOutdated path line comments(first: 10) { nodes { databaseId author { login } body } } } } } } }";
 
 /** Builds the agent tools. Rebuilt for each session, so the description reflects the soft rule at that moment. */
 export function buildTools(deps: ToolsDeps): AgentToolDefinition[] {
-  const { proxy } = deps;
-  const remoteOf = deps.remoteOf ?? gitRemote;
-  const suffix = deps.softRule ? SOFT_RULE_DESCRIPTION : "";
-
-  const tool = <S extends z.ZodType>(name: string, description: string, input: S, run: (input: z.output<S>, ctx: AgentToolContext, call: ReturnType<typeof makeCall>) => Promise<string>) =>
-    defineAgentTool({
-      name,
-      description: description + suffix,
-      input,
-      async execute(args, ctx): Promise<AgentToolResult> {
-        try {
-          return { text: await run(args, ctx, makeCall(ctx, name)) };
-        } catch (error) {
-          if (error instanceof ProxyError) return { isError: true, text: error.message };
-          return { isError: true, text: `${name} failed: ${(error as Error).message}` };
-        }
-      },
-    });
-
-  const makeCall = (ctx: AgentToolContext, name: string) => ({
-    ctx: { agentId: ctx.agent.id, agentTitle: ctx.agent.title ?? ctx.agent.id, tool: name },
-    async repo(given: string | undefined): Promise<string> {
-      const value = (given ?? "").trim() || repoFromRemote(await remoteOf(ctx.agent.cwd));
-      if (!/^[^/\s]+\/[^/\s]+$/.test(value)) throw new ProxyError("invalid", "Pass repo as owner/name (it could not be inferred from the working directory).");
-      return value;
-    },
-  });
-  type Calls = ReturnType<typeof makeCall>;
-  const get = (c: Calls, path: string, query?: Record<string, string | number | undefined>) => proxy.rest(c.ctx, { method: "GET", path, ...(query ? { query } : {}), actions: ["read"] });
-  const write = (c: Calls, method: string, path: string, action: Action, body?: unknown) => proxy.rest(c.ctx, { method, path, ...(body !== undefined ? { body } : {}), actions: [action] });
-
-  const pr = (p: Record<string, any>) => ({
-    number: p.number, title: p.title, state: p.merged_at ? "merged" : p.state, draft: p.draft, author: p.user?.login, head: p.head?.ref, base: p.base?.ref,
-    updated_at: p.updated_at, url: p.html_url, mergeable_state: p.mergeable_state, labels: p.labels?.map((l: any) => l.name),
-  });
-  const issue = (i: Record<string, any>) => ({
-    number: i.number, title: i.title, state: i.state, author: i.user?.login, labels: i.labels?.map((l: any) => l.name), assignees: i.assignees?.map((a: any) => a.login),
-    comments: i.comments, updated_at: i.updated_at, url: i.html_url, is_pull_request: !!i.pull_request,
-  });
+  const kit = createKit(deps);
+  const { proxy, tool, get, write } = kit;
 
   const tools: AgentToolDefinition[] = [
     tool("github_policy", "Show what you may do on GitHub: allowed owners, and for a repository which actions the policy allows or denies. Call this before attempting a write.", z.object({ repo: repoField }), async ({ repo }, _ctx, c) => {
@@ -106,11 +42,23 @@ export function buildTools(deps: ToolsDeps): AgentToolDefinition[] {
       return clip({ repo: target, actions: rows, rateLimits: proxy.overview().sources.filter((s) => s.active) });
     }),
 
-    tool("github_repo_info", "Get repository information: description, default branch, visibility, open issue count.", z.object({ repo: repoField }), async ({ repo }, _ctx, c) => {
-      const r = await get(c, `/repos/${await c.repo(repo)}`);
-      const d = r.data as Record<string, any>;
-      return clip({ full_name: d.full_name, description: d.description, default_branch: d.default_branch, private: d.private, archived: d.archived, open_issues_count: d.open_issues_count, pushed_at: d.pushed_at, url: d.html_url, permissions: d.permissions }) + served(r);
-    }),
+    tool(
+      "github_repo_info",
+      "Get repository information: description, default branch, visibility, topics, open issue count. include: readme (decoded, first 8000 characters) and languages (bytes per language).",
+      z.object({ repo: repoField, include: z.array(z.enum(["readme", "languages"])).optional() }),
+      async ({ repo, include }, _ctx, c) => {
+        const target = await c.repo(repo);
+        const r = await get(c, `/repos/${target}`);
+        const d = r.data as Record<string, any>;
+        const out: Record<string, unknown> = { full_name: d.full_name, description: d.description, default_branch: d.default_branch, private: d.private, archived: d.archived, fork: d.fork, topics: d.topics, open_issues_count: d.open_issues_count, pushed_at: d.pushed_at, url: d.html_url, permissions: d.permissions };
+        if (include?.includes("languages")) out.languages = (await get(c, `/repos/${target}/languages`)).data;
+        if (include?.includes("readme")) {
+          const readme = (await get(c, `/repos/${target}/readme`)).data as Record<string, any>;
+          out.readme = { path: readme.path, text: Buffer.from(String(readme.content ?? ""), "base64").toString("utf8").slice(0, 8000) };
+        }
+        return clip(out) + served(r);
+      },
+    ),
 
     tool("github_list_branches", "List branches of a repository.", z.object({ repo: repoField, ...page }), async ({ repo, page: pg, per_page }, _ctx, c) => {
       const r = await get(c, `/repos/${await c.repo(repo)}/branches`, { page: pg, per_page: per_page ?? 30 });
@@ -130,8 +78,8 @@ export function buildTools(deps: ToolsDeps): AgentToolDefinition[] {
 
     tool(
       "github_get_pr",
-      "Get one pull request. Use include to also fetch its changed files, reviews, or comments.",
-      z.object({ repo: repoField, number: z.number().int(), include: z.array(z.enum(["files", "reviews", "comments"])).optional() }),
+      "Get one pull request. Use include to also fetch its changed files, commits, reviews, comments, review threads (with the thread ids github_pr_manage resolves) or the raw unified diff.",
+      z.object({ repo: repoField, number: z.number().int(), include: z.array(z.enum(["files", "commits", "reviews", "comments", "threads", "diff"])).optional() }),
       async ({ repo, number, include }, _ctx, c) => {
         const target = await c.repo(repo);
         const base = `/repos/${target}/pulls/${number}`;
@@ -145,7 +93,16 @@ export function buildTools(deps: ToolsDeps): AgentToolDefinition[] {
           out.comments = issueComments.map((m) => ({ user: m.user?.login, body: m.body, at: m.created_at }));
           out.review_comments = reviewComments.map((m) => ({ user: m.user?.login, path: m.path, line: m.line, body: m.body, at: m.created_at }));
         }
-        return clip(out) + served(main);
+        if (include?.includes("commits")) out.commits = ((await get(c, `${base}/commits`, { per_page: 100 })).data as any[]).map((m) => ({ sha: m.sha, message: String(m.commit?.message ?? "").split("\n")[0], author: m.author?.login ?? m.commit?.author?.name }));
+        if (include?.includes("threads")) {
+          const [owner, name] = target.split("/") as [string, string];
+          const g = await kit.gql(c, THREADS_QUERY, { owner, name, number }, { actions: ["read"], repo: target });
+          const nodes = ((g.data as any)?.data?.repository?.pullRequest?.reviewThreads?.nodes ?? []) as any[];
+          out.review_threads = nodes.map((t) => ({ id: t.id, resolved: t.isResolved, outdated: t.isOutdated, path: t.path, line: t.line, comments: t.comments?.nodes?.map((m: any) => ({ id: m.databaseId, user: m.author?.login, body: m.body })) }));
+        }
+        let text = clip(out) + served(main);
+        if (include?.includes("diff")) text += `\n\n--- diff ---\n${clipText(String((await get(c, base, undefined, "application/vnd.github.diff")).data ?? ""))}`;
+        return text;
       },
     ),
 
@@ -229,12 +186,12 @@ export function buildTools(deps: ToolsDeps): AgentToolDefinition[] {
     tool(
       "github_search",
       "Search GitHub. Scope it with repo, org or user (required). type: issues, prs, code, repos or commits.",
-      z.object({ query: z.string(), type: z.enum(["issues", "prs", "code", "repos", "commits"]).default("issues"), repo: z.string().optional(), org: z.string().optional(), user: z.string().optional(), ...page }),
-      async ({ query, type, repo, org, user, page: pg, per_page }, _ctx, c) => {
+      z.object({ query: z.string(), type: z.enum(["issues", "prs", "code", "repos", "commits"]).default("issues"), repo: z.string().optional(), org: z.string().optional(), user: z.string().optional(), sort: z.string().optional().describe("For example updated, created, comments, stars, indexed."), order: z.enum(["asc", "desc"]).optional(), ...page }),
+      async ({ query, type, repo, org, user, sort, order, page: pg, per_page }, _ctx, c) => {
         const qualifiers = [repo && `repo:${repo}`, org && `org:${org}`, user && `user:${user}`].filter(Boolean).join(" ");
         const q = [query, type === "prs" ? "is:pr" : type === "issues" ? "is:issue" : "", qualifiers].filter(Boolean).join(" ");
         const endpoint = type === "prs" || type === "issues" ? "issues" : type === "repos" ? "repositories" : type;
-        const r = await get(c, `/search/${endpoint}`, { q, page: pg, per_page: per_page ?? 20 });
+        const r = await get(c, `/search/${endpoint}`, { q, sort, order, page: pg, per_page: per_page ?? 20 });
         const d = r.data as { total_count: number; items: any[] };
         const items = d.items.map((i) => (type === "code" ? { path: i.path, repo: i.repository?.full_name, url: i.html_url } : type === "repos" ? { full_name: i.full_name, description: i.description, stars: i.stargazers_count, url: i.html_url } : type === "commits" ? { sha: i.sha, message: i.commit?.message?.split("\n")[0], repo: i.repository?.full_name, url: i.html_url } : issue(i)));
         return clip({ total_count: d.total_count, items }) + pagination(r) + served(r);
@@ -265,6 +222,9 @@ export function buildTools(deps: ToolsDeps): AgentToolDefinition[] {
         return clip(r.data) + pagination(r) + served(r);
       },
     ),
+    ...prTools(kit),
+    ...repoTools(kit),
+    ...accountTools(kit),
   ];
   return tools;
 }

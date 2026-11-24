@@ -63,6 +63,10 @@ interface Prepared {
   cacheable: boolean;
   /** The owners the call touches: they decide which GitHub App serves it. */
   owners: string[];
+  /** Overrides the Accept header (raw diffs, for example). Part of the cache key. */
+  accept?: string;
+  /** What a write makes stale: cached reads whose key contains one of these fragments are dropped. */
+  invalidates?: string[];
   /** Set by the settings UI to force one App (owner discovery), bypassing the active source. */
   via?: { app: string };
 }
@@ -99,7 +103,7 @@ export class GithubProxy {
 
   // ---- public entry points -------------------------------------------------------------------
 
-  async rest(ctx: CallContext, input: { method: string; path: string; query?: Record<string, string | number | undefined>; body?: unknown; actions?: Action[] }): Promise<ProxyResponse> {
+  async rest(ctx: CallContext, input: { method: string; path: string; query?: Record<string, string | number | undefined>; body?: unknown; actions?: Action[]; accept?: string }): Promise<ProxyResponse> {
     const { path, query: pathQuery } = normalizePath(input.path);
     const params = new URLSearchParams(pathQuery);
     for (const [k, v] of Object.entries(input.query ?? {})) if (v !== undefined && v !== "") params.set(k, String(v));
@@ -109,16 +113,25 @@ export class GithubProxy {
     // A curated tool states what it does; only github_api is classified from the path.
     if (input.actions) classified.actions = input.actions;
     const body = input.body === undefined ? undefined : JSON.stringify(input.body);
-    return this.run(ctx, { method, url: `${this.base}${path}${qs ? `?${qs}` : ""}`, ...(body !== undefined ? { body } : {}), classified, resource: resourceOf(path), cacheable: method === "GET", owners: classified.owners });
+    return this.run(ctx, { method, url: `${this.base}${path}${qs ? `?${qs}` : ""}`, ...(body !== undefined ? { body } : {}), classified, resource: resourceOf(path), cacheable: method === "GET", owners: classified.owners, ...(input.accept ? { accept: input.accept } : {}), invalidates: invalidationOf(classified.repo, path) });
   }
 
-  async graphql(ctx: CallContext, input: { query: string; variables?: Record<string, unknown>; repo?: string }): Promise<ProxyResponse> {
+  /**
+   * `actions` (and `owner` when there is no repo) are for curated tools, whose document is fixed in code: they state what
+   * the call does, and the document is not parsed for scoping. Only `github_api` is classified from the document.
+   */
+  async graphql(ctx: CallContext, input: { query: string; variables?: Record<string, unknown>; repo?: string; actions?: Action[]; owner?: string }): Promise<ProxyResponse> {
     const classified = classifyGraphql(input.query, input.repo ?? "", input.variables);
+    if (input.actions) {
+      classified.actions = input.actions;
+      if (input.owner) classified.owners = [input.owner.toLowerCase()];
+      if (input.owner || input.repo) delete classified.unscoped;
+    }
     if (classified.info.operation === "subscription") {
       return this.refuse(ctx, classified, "Denied: GraphQL subscriptions are not supported.");
     }
     const body = JSON.stringify({ query: input.query, ...(input.variables ? { variables: input.variables } : {}) });
-    return this.run(ctx, { method: "POST", url: `${this.base}/graphql`, body, classified, resource: "graphql", cacheable: classified.info.operation === "query", owners: classified.owners });
+    return this.run(ctx, { method: "POST", url: `${this.base}/graphql`, body, classified, resource: "graphql", cacheable: classified.info.operation === "query", owners: classified.owners, invalidates: classified.info.operation === "query" ? [] : [...(classified.repo ? [`/repos/${classified.repo}`] : []), "/graphql"] });
   }
 
   /** Same checks as a real call, nothing sent to GitHub: for the "test this call" box. */
@@ -257,7 +270,7 @@ export class GithubProxy {
       resource: p.resource,
     });
     const byKey = new Map(creds.map((c) => [c.key, c]));
-    const keyOf = (c: Credential) => cacheKey(p.method, p.url, p.body, c.key);
+    const keyOf = (c: Credential) => cacheKey(p.method, p.url, p.accept ? `${p.body ?? ""}|${p.accept}` : p.body, c.key);
     const entryOf = (c: Credential | undefined) => (p.cacheable && c ? this.deps.cache.get(keyOf(c)) : undefined);
     const usable = choice.order.map((k) => byKey.get(k)!);
 
@@ -315,7 +328,7 @@ export class GithubProxy {
       const token = await tokenSource.token();
       const headers: Record<string, string> = {
         Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github+json",
+        Accept: p.accept ?? "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
         "User-Agent": "paseo-github-proxy",
       };
@@ -344,9 +357,9 @@ export class GithubProxy {
       const contentType = res.headers.get("content-type") ?? "application/json";
       if (p.cacheable) {
         this.deps.cache.set({ key, etag: res.headers.get("etag"), status: res.status, body: text, contentType, link: res.headers.get("link"), fetchedAt: now });
-      } else if (p.method !== "GET" && p.classified.repo) {
-        // A write changes what the reads of that repo will say, whoever asked.
-        this.deps.cache.invalidate(`/repos/${p.classified.repo}`);
+      } else if (p.method !== "GET") {
+        // A write changes what the reads of that repo (or account) will say, whoever asked.
+        for (const fragment of p.invalidates ?? (p.classified.repo ? [`/repos/${p.classified.repo}`] : [])) this.deps.cache.invalidate(fragment);
       }
       return { kind: "ok", response: { status: res.status, data: parseBody(text, contentType), served: "upstream", link: res.headers.get("link"), source: cred.source, app: cred.app } };
     }
@@ -375,6 +388,14 @@ export class GithubProxy {
     if (config.allowedOwners.length === 0) warnings.push("No allowed owner yet: every call is refused until you add one in Auth.");
     return { now, sources, stats: this.deps.activity.stats(this.deps.cache.size), allowedOwnersEmpty: config.allowedOwners.length === 0, warnings };
   }
+}
+
+/** The cached reads a REST write makes stale: its repository, else its account or collection (/orgs/acme, /gists, /notifications). */
+function invalidationOf(repo: string, path: string): string[] {
+  if (repo) return [`/repos/${repo}`];
+  const parts = path.split("/").filter(Boolean);
+  const keep = parts[0] === "orgs" || parts[0] === "users" ? 2 : 1;
+  return parts.length ? [`/${parts.slice(0, keep).join("/")}`] : [];
 }
 
 function parseBody(body: string, contentType: string): unknown {

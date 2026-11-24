@@ -1,6 +1,6 @@
 GitHub Proxy gives every agent the same small set of `github_*` tools for working with GitHub, and puts your rules, a shared cache and rate-limit handling between the agents and GitHub.
 
-Agents list and read pull requests, issues, checks, branches and repositories, search, and, when you allow it, comment, review, open issues and pull requests, merge, and delete branches. A generic `github_api` tool (REST and GraphQL) covers the rest, and is only usable where the policy allows it.
+Agents list and read pull requests, issues, commits, files, checks, releases, workflow runs and logs, labels, projects, secret names, rulesets and repositories, search, and, when you allow it, comment, review, open issues and pull requests, edit and label them, create branches, write files, manage releases and workflow runs, merge, and delete branches. Each group of `gh` commands has a typed tool with its own policy action, and secret values are never read or set. A generic `github_api` tool (REST and GraphQL) covers the rest, and is only usable where the policy allows it.
 
 ## How it works
 
