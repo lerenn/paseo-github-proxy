@@ -49,7 +49,7 @@
 <h2 id="storage">What is stored, and where</h2>
 <table>
 <tr><th>File</th><th>Contents</th></tr>
-<tr><td><code>config.json</code></td><td>Active source, fallback, allowed owners, TTL, soft rule, policy.</td></tr>
+<tr><td><code>config.json</code></td><td>Active source, fallback, allowed owners, TTL, soft rule, hard rule, policy.</td></tr>
 <tr><td><code>apps.json</code></td><td>The GitHub Apps: organization, App ID, installation ID, extra owners, default flag. No secret.</td></tr>
 <tr><td><code>secrets.json</code> (0600)</td><td>The private key of each GitHub App.</td></tr>
 <tr><td><code>cache.json</code></td><td>Cached GitHub responses, kept per credential so an answer is never shared between Apps.</td></tr>
@@ -59,6 +59,7 @@
 <h2 id="limits-known">Limits</h2>
 <ul>
 <li>The soft rule is an instruction. An agent with a shell can still run <code>gh</code>.</li>
+<li>The hard rule (Block gh/curl commands) only sees permission requests, so an agent in a bypass mode is never checked. It matches command words, it is not a sandbox: a script file or a command built at run time gets through. Block egress to GitHub on the daemon machine for a real block.</li>
 <li>GraphQL scoping is best effort: it checks the repository you pass and <code>owner:</code> values in the query. Queries by node ID cannot be scoped to an owner and are refused unless every owner is allowed.</li>
 <li>On Paseo 0.16 the soft rule only reaches agents created after it was turned on.</li>
 </ul>

@@ -1,10 +1,11 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import contribute from "../index.server";
 import { activityRpc, appCredentialsClearRpc, appCredentialsSaveRpc, configGetRpc, configSaveRpc, dryRunRpc, overviewRpc, sourceCheckRpc } from "../shared/contracts";
 import { defaultConfig } from "../shared/config";
+import { HARD_RULE_MESSAGE } from "./hardrule";
 import { SOFT_RULE_METADATA_KEY, SOFT_RULE_PROMPT } from "./tools";
 
 let home: string;
@@ -57,6 +58,24 @@ describe("server entry", () => {
     const out = await hooks.get("agent.open.before")!({ request: request({ appendSystemPrompt: ["existing"] }) }, {});
     expect(out.appendSystemPrompt).toEqual(["existing", SOFT_RULE_PROMPT]);
     expect(out.tools[0].description).toMatch(/instead of the gh CLI or curl/);
+  });
+
+  it("the hard rule denies a gh permission request only while it is on, and logs it", async () => {
+    const { hooks, rpc } = load();
+    const respond = vi.fn(async () => {});
+    const ctx = { paseo: { agents: { ref: () => ({ respondToPermission: respond }) } } };
+    const event = (command: string) => ({ agent: { id: "a", title: "T" }, request: { id: "r1", kind: "tool", input: { command } } });
+    const hook = hooks.get("agent.permission.before")!;
+    await hook(event("gh pr list"), ctx);
+    expect(respond).not.toHaveBeenCalled();
+    const { config } = await rpc(configGetRpc);
+    await rpc(configSaveRpc, { config: { ...config, blockRawGithub: true } });
+    await hook(event("git status"), ctx);
+    expect(respond).not.toHaveBeenCalled();
+    await hook(event("gh pr list"), ctx);
+    expect(respond).toHaveBeenCalledWith({ requestId: "r1", response: { behavior: "deny", message: HARD_RULE_MESSAGE } });
+    const { entries } = await rpc(activityRpc, {});
+    expect(entries[0]).toMatchObject({ status: "denied", tool: "hard rule" });
   });
 
   it("the soft rule is also saved in a new agent's system prompt, for hosts without appendSystemPrompt", async () => {
