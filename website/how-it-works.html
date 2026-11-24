@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How it works · Paseo GitHub Proxy</title>
+<link rel="icon" href="favicon.png">
+<meta name="description" content="Give every agent policy-controlled, cached, rate-limit-aware GitHub tools instead of raw gh and curl: allow and deny rules per repo and action, ETag cache, live rate limits and an activity log.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Paseo GitHub Proxy: policy-controlled GitHub tools for every agent">
+<meta property="og:description" content="Give every agent policy-controlled, cached, rate-limit-aware GitHub tools instead of raw gh and curl: allow and deny rules per repo and action, ETag cache, live rate limits and an activity log.">
+<meta property="og:url" content="https://lerenn.github.io/paseo-github-proxy/how-it-works.html">
+<meta property="og:image" content="https://lerenn.github.io/paseo-github-proxy/favicon.png">
+<meta name="twitter:card" content="summary">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site"><div class="inner">
+<a class="brand" href="index.html"><img src="favicon.png" alt="">Paseo GitHub Proxy</a>
+<nav><a href="index.html">Home</a><a href="getting-started.html">Getting started</a><a href="reference.html">Reference</a><a href="how-it-works.html" aria-current="page">How it works</a><a class="gh" href="https://github.com/lerenn/paseo-github-proxy" aria-label="GitHub" title="GitHub"><svg viewBox="0 0 16 16" width="20" height="20" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a></nav>
+</div></header>
+<main>
+
+<h1>How it works</h1>
+<p class="lead">The proxy runs inside the Paseo daemon, as part of the plugin. There is no external service.</p>
+
+<h2 id="tools">The injected tools</h2>
+<p>When an agent session opens, the plugin adds its <code>github_*</code> tools to it (Paseo exposes plugin agent tools to the agent as MCP tools). Every agent gets them; sessions opened for history do not. With the soft rule on, the same hook appends a short instruction to the system prompt, and each tool description says to use it instead of <code>gh</code> or <code>curl</code>.</p>
+
+<h2 id="pipeline">The pipeline of one call</h2>
+<ol class="steps">
+<li><strong>Classify.</strong> A curated tool states its action (for example <code>create_pr</code>). <code>github_api</code> is classified from the request: the method, the path, or the GraphQL root fields.</li>
+<li><strong>Owner allowlist.</strong> Every owner the call touches must be allowed. A call that cannot be tied to an owner is refused, unless every owner is allowed.</li>
+<li><strong>Policy.</strong> Each needed action is checked. A matching deny rule wins, then an allow rule, then the default permissions. A denial returns a message naming the rule and reason.</li>
+<li><strong>Cache.</strong> A read younger than the TTL is answered locally. An older one is sent with <code>If-None-Match</code>; a <code>304</code> costs no rate limit and restarts the clock.</li>
+<li><strong>Credentials.</strong> The active source is used, then the other if fallback is on. A source that is rate limited is skipped until it resets.</li>
+<li><strong>Response.</strong> The rate-limit headers are recorded, the response is cached, a write drops the cached reads of that repository, and the call is added to the activity log.</li>
+</ol>
+
+<h2 id="cache">Cache</h2>
+<p>Entries are keyed by method, URL and request body, kept in memory and in <code>cache.json</code> so they survive a restart, and trimmed oldest-used first (500 entries or about 25 MB). Reads are served locally for the TTL (30 seconds by default, 0 to 3600, set in the Policy tab). Past it, the saved ETag is sent. GraphQL queries have no ETag, so they are cached by TTL only; mutations are never cached.</p>
+
+<h2 id="limits">Rate limits</h2>
+<p>The plugin tracks <code>x-ratelimit-*</code> per credential source and per resource (<code>core</code>, <code>graphql</code>, <code>search</code>). A source is blocked until its reset when a response says the limit is exhausted, carries <code>retry-after</code>, or reports a secondary limit. With nothing left to try, the agent gets a cached answer marked as stale when one exists, and otherwise an error such as <em>Retry at 14:07 (in about 12 min)</em>. The Overview tab shows the remaining count, a live countdown, and a warning when a limit is nearly used up.</p>
+
+<h2 id="policy">Policy</h2>
+<p>A policy is a default list of allowed actions (from a preset, read-only by default) plus ordered rules. See the <a href="reference.html#policy">reference</a> for the actions and how generic calls are classified. The generic <code>github_api</code> tool can never bypass a rule: a merge through it needs both <code>merge</code> and <code>generic_api_write</code>.</p>
+
+<h2 id="storage">What is stored, and where</h2>
+<table>
+<tr><th>File</th><th>Contents</th></tr>
+<tr><td><code>config.json</code></td><td>Active source, fallback, allowed owners, TTL, soft rule, policy.</td></tr>
+<tr><td><code>secrets.json</code> (0600)</td><td>The GitHub App ID, installation ID and private key.</td></tr>
+<tr><td><code>cache.json</code></td><td>Cached GitHub responses.</td></tr>
+</table>
+<p>All three are in <code>$PASEO_HOME/plugin-data/lerenn/paseo-github-proxy/</code>. The activity log and counters live in memory and reset when the plugin restarts.</p>
+
+<h2 id="limits-known">Limits</h2>
+<ul>
+<li>The soft rule is an instruction. An agent with a shell can still run <code>gh</code>.</li>
+<li>GraphQL scoping is best effort: it checks the repository you pass and <code>owner:</code> values in the query. Queries by node ID cannot be scoped to an owner and are refused unless every owner is allowed.</li>
+<li>Changes to the soft rule apply to sessions opened afterwards.</li>
+</ul>
+
+</main>
+<footer class="site"><div class="inner">Paseo GitHub Proxy is a plugin for <a href="https://paseo.sh">Paseo</a>. Source on <a href="https://github.com/lerenn/paseo-github-proxy">GitHub</a>.</div></footer>
+</body>
+</html>

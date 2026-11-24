@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reference · Paseo GitHub Proxy</title>
+<link rel="icon" href="favicon.png">
+<meta name="description" content="Give every agent policy-controlled, cached, rate-limit-aware GitHub tools instead of raw gh and curl: allow and deny rules per repo and action, ETag cache, live rate limits and an activity log.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Paseo GitHub Proxy: policy-controlled GitHub tools for every agent">
+<meta property="og:description" content="Give every agent policy-controlled, cached, rate-limit-aware GitHub tools instead of raw gh and curl: allow and deny rules per repo and action, ETag cache, live rate limits and an activity log.">
+<meta property="og:url" content="https://lerenn.github.io/paseo-github-proxy/reference.html">
+<meta property="og:image" content="https://lerenn.github.io/paseo-github-proxy/favicon.png">
+<meta name="twitter:card" content="summary">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site"><div class="inner">
+<a class="brand" href="index.html"><img src="favicon.png" alt="">Paseo GitHub Proxy</a>
+<nav><a href="index.html">Home</a><a href="getting-started.html">Getting started</a><a href="reference.html" aria-current="page">Reference</a><a href="how-it-works.html">How it works</a><a class="gh" href="https://github.com/lerenn/paseo-github-proxy" aria-label="GitHub" title="GitHub"><svg viewBox="0 0 16 16" width="20" height="20" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a></nav>
+</div></header>
+<div class="doc">
+<aside class="sidebar"><nav aria-label="On this page"><a href="#tools">Tools</a>
+<a href="#policy">Policy</a><ul><li><a href="#actions">Actions</a></li><li><a href="#presets">Presets</a></li><li><a href="#rules">Rules</a></li><li><a href="#classification">github_api classification</a></li><li><a href="#owners">Allowed owners</a></li></ul>
+<a href="#settings">Settings</a>
+<a href="#tabs">The page</a>
+<a href="#files">Files</a></nav></aside>
+<main>
+
+<h1>Reference</h1>
+
+<h2 id="tools">Tools</h2>
+<p>Every agent has these. <code>repo</code> is <code>owner/name</code> and can be omitted: it is inferred from the <code>origin</code> remote of the agent's working directory.</p>
+<table>
+<tr><th>Tool</th><th>What it does</th><th>Action</th><th>Parameters</th></tr>
+<tr><td><code>github_policy</code></td><td>What you may do on a repo (every action allowed or denied, with the reason) and the active rate-limit state.</td><td>—</td><td>repo</td></tr><tr><td><code>github_repo_info</code></td><td>Description, default branch, visibility, open issue count.</td><td><code>read</code></td><td>repo</td></tr><tr><td><code>github_list_branches</code></td><td>List branches.</td><td><code>read</code></td><td>repo, page, per_page</td></tr><tr><td><code>github_delete_branch</code></td><td>Delete a branch.</td><td><code>delete_branch</code></td><td>repo, branch</td></tr><tr><td><code>github_list_prs</code></td><td>List pull requests.</td><td><code>read</code></td><td>repo, state, head, base, page, per_page</td></tr><tr><td><code>github_get_pr</code></td><td>One pull request; include files, reviews or comments.</td><td><code>read</code></td><td>repo, number, include</td></tr><tr><td><code>github_create_pr</code></td><td>Open a pull request.</td><td><code>create_pr</code></td><td>repo, title, head, base, body, draft</td></tr><tr><td><code>github_update_pr</code></td><td>Edit, close or reopen a pull request.</td><td><code>update_pr</code></td><td>repo, number, title, body, base, state</td></tr><tr><td><code>github_merge_pr</code></td><td>Merge a pull request; pass sha to refuse if the branch moved.</td><td><code>merge</code></td><td>repo, number, merge_method, commit_title, commit_message, sha</td></tr><tr><td><code>github_review_pr</code></td><td>Approve, request changes or comment, with optional line comments.</td><td><code>review</code></td><td>repo, number, event, body, comments</td></tr><tr><td><code>github_comment</code></td><td>Comment on an issue or pull request.</td><td><code>comment</code></td><td>repo, number, body</td></tr><tr><td><code>github_list_issues</code></td><td>List issues.</td><td><code>read</code></td><td>repo, state, labels, assignee, page, per_page</td></tr><tr><td><code>github_get_issue</code></td><td>One issue, optionally with comments.</td><td><code>read</code></td><td>repo, number, include_comments</td></tr><tr><td><code>github_create_issue</code></td><td>Open an issue.</td><td><code>create_issue</code></td><td>repo, title, body, labels, assignees</td></tr><tr><td><code>github_checks</code></td><td>Check runs and commit status of a ref or pull request.</td><td><code>read</code></td><td>repo, ref or pr</td></tr><tr><td><code>github_search</code></td><td>Search issues, PRs, code, repos or commits. Needs a repo, org or user scope.</td><td><code>read</code></td><td>query, type, repo, org, user, page, per_page</td></tr><tr><td><code>github_api</code></td><td>REST or GraphQL for what the others do not cover.</td><td><code>generic_api_read / generic_api_write + the specific action</code></td><td>kind, method, path, params, body, query, variables, repo</td></tr>
+</table>
+<p>Lists accept <code>page</code> and <code>per_page</code> (default 30); when more results exist the answer says which page to ask for. Answers are capped at about 40,000 characters.</p>
+
+<h2 id="policy">Policy</h2>
+<h3 id="actions">Actions</h3>
+<table>
+<tr><th>Action</th><th>Covers</th><th>Risk</th></tr>
+<tr><td><code>read</code></td><td>Get and list PRs, issues, checks, branches, repo info, search.</td><td>safe</td></tr><tr><td><code>comment</code></td><td>Comment on issues and pull requests.</td><td>low</td></tr><tr><td><code>review</code></td><td>Submit a pull request review.</td><td>medium</td></tr><tr><td><code>create_issue</code></td><td>Open issues.</td><td>low</td></tr><tr><td><code>create_pr</code></td><td>Open pull requests.</td><td>low</td></tr><tr><td><code>update_pr</code></td><td>Edit, close or reopen pull requests and issues.</td><td>medium</td></tr><tr><td><code>merge</code></td><td>Merge pull requests.</td><td>high</td></tr><tr><td><code>delete_branch</code></td><td>Delete branches.</td><td>high</td></tr><tr><td><code>force_push</code></td><td>Non fast-forward update of a ref.</td><td>high</td></tr><tr><td><code>generic_api_read</code></td><td>github_api GET and GraphQL queries.</td><td>low</td></tr><tr><td><code>generic_api_write</code></td><td>github_api writes and GraphQL mutations.</td><td>high</td></tr>
+</table>
+<h3 id="presets">Presets</h3>
+<table>
+<tr><th>Preset</th><th>Allows by default</th></tr>
+<tr><td>Read-only (default)</td><td><code>read</code>, <code>generic_api_read</code></td></tr>
+<tr><td>PR workflow</td><td>Read-only plus <code>comment</code>, <code>review</code>, <code>create_issue</code>, <code>create_pr</code>, <code>update_pr</code></td></tr>
+<tr><td>Full</td><td>Every action</td></tr>
+</table>
+<p>Changing an individual permission makes the policy <em>Custom</em> unless it matches a preset.</p>
+<h3 id="rules">Rules</h3>
+<p>A rule has an effect (<code>allow</code> or <code>deny</code>), repository patterns, actions (or all), and an optional reason that is shown to the agent in the denial. For each needed action: a matching <strong>deny</strong> rule denies; otherwise a matching <strong>allow</strong> rule allows; otherwise the default permissions decide. Rule order does not matter.</p>
+<p>Patterns are <code>owner/repo</code>, case-insensitive. <code>*</code> matches any run of characters inside one part: <code>acme/*</code>, <code>*/docs</code>, <code>acme/web-*</code>. A lone <code>*</code> matches every repository.</p>
+<h3 id="classification">How github_api is classified</h3>
+<table>
+<tr><th>Request</th><th>Needs</th></tr>
+<tr><td><code>GET</code>, <code>HEAD</code>, GraphQL query</td><td><code>generic_api_read</code></td></tr>
+<tr><td><code>POST .../issues</code></td><td><code>create_issue</code> + <code>generic_api_write</code></td></tr>
+<tr><td><code>POST .../issues/N/comments</code>, <code>.../pulls/N/comments</code></td><td><code>comment</code> + <code>generic_api_write</code></td></tr>
+<tr><td><code>POST .../pulls/N/reviews</code></td><td><code>review</code> + <code>generic_api_write</code></td></tr>
+<tr><td><code>POST .../pulls</code></td><td><code>create_pr</code> + <code>generic_api_write</code></td></tr>
+<tr><td><code>PATCH/PUT .../pulls/N</code>, <code>.../issues/N</code></td><td><code>update_pr</code> + <code>generic_api_write</code></td></tr>
+<tr><td><code>PUT .../pulls/N/merge</code>, <code>POST .../merges</code></td><td><code>merge</code> + <code>generic_api_write</code></td></tr>
+<tr><td><code>DELETE .../git/refs/...</code></td><td><code>delete_branch</code> + <code>generic_api_write</code></td></tr>
+<tr><td><code>PATCH .../git/refs/...</code> with <code>force: true</code></td><td><code>force_push</code> + <code>generic_api_write</code></td></tr>
+<tr><td>Any other write</td><td><code>generic_api_write</code></td></tr>
+<tr><td>GraphQL mutation</td><td><code>generic_api_write</code> + the action of each root field (<code>mergePullRequest</code> → <code>merge</code>, <code>addComment</code> → <code>comment</code>, <code>deleteRef</code> → <code>delete_branch</code>, ...)</td></tr>
+</table>
+<h3 id="owners">Allowed owners</h3>
+<p>Checked before the policy. Exact, case-insensitive; <code>*</code> allows all; an empty list refuses everything. Paths that name no owner (<code>/user/repos</code>, a search without <code>repo:</code>, <code>org:</code> or <code>user:</code>, a GraphQL call without <code>repo</code>) are refused unless <code>*</code> is allowed.</p>
+
+<h2 id="settings">Settings</h2>
+<table>
+<tr><th>Setting</th><th>Where</th><th>Default</th></tr>
+<tr><td>Active source (<code>gh</code> or <code>app</code>)</td><td>Auth</td><td><code>gh</code></td></tr>
+<tr><td>Fall back to the other source on rate limit</td><td>Auth</td><td>off</td></tr>
+<tr><td>Allowed owners</td><td>Auth</td><td>empty (refuses everything)</td></tr>
+<tr><td>GitHub App credentials</td><td>Auth</td><td>none</td></tr>
+<tr><td>Preset, default permissions, rules</td><td>Policy</td><td>Read-only, no rules</td></tr>
+<tr><td>Cache TTL in seconds (0 to 3600)</td><td>Policy</td><td>30</td></tr>
+<tr><td>Forbid direct use of gh, curl and raw GitHub</td><td>Policy</td><td>off</td></tr>
+</table>
+
+<h2 id="tabs">The page</h2>
+<ul>
+<li><strong>Overview</strong>: remaining and limit per credential source and resource, a reset countdown, a requests-per-minute chart, the cache hit rate, and banners when a limit is nearly or fully used up or no owner is allowed.</li>
+<li><strong>Auth</strong>: source choice, gh check, App credentials form, fallback toggle, allowed owners.</li>
+<li><strong>Policy</strong>: presets, default permissions, rules, the dry-run box, the soft rule, the cache TTL.</li>
+<li><strong>Activity</strong>: a live log of calls per agent: tool, repository, allowed, cached, revalidated, denied or failed, HTTP status, source and duration. Tap a row for the full message.</li>
+</ul>
+
+<h2 id="files">Files</h2>
+<p><code>$PASEO_HOME/plugin-data/lerenn/paseo-github-proxy/</code>: <code>config.json</code>, <code>secrets.json</code> (mode 0600), <code>cache.json</code>.</p>
+
+</main>
+</div>
+<footer class="site"><div class="inner">Paseo GitHub Proxy is a plugin for <a href="https://paseo.sh">Paseo</a>. Source on <a href="https://github.com/lerenn/paseo-github-proxy">GitHub</a>.</div></footer>
+</body>
+</html>

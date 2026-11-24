@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Getting started · Paseo GitHub Proxy</title>
+<link rel="icon" href="favicon.png">
+<meta name="description" content="Give every agent policy-controlled, cached, rate-limit-aware GitHub tools instead of raw gh and curl: allow and deny rules per repo and action, ETag cache, live rate limits and an activity log.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Paseo GitHub Proxy: policy-controlled GitHub tools for every agent">
+<meta property="og:description" content="Give every agent policy-controlled, cached, rate-limit-aware GitHub tools instead of raw gh and curl: allow and deny rules per repo and action, ETag cache, live rate limits and an activity log.">
+<meta property="og:url" content="https://lerenn.github.io/paseo-github-proxy/getting-started.html">
+<meta property="og:image" content="https://lerenn.github.io/paseo-github-proxy/favicon.png">
+<meta name="twitter:card" content="summary">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site"><div class="inner">
+<a class="brand" href="index.html"><img src="favicon.png" alt="">Paseo GitHub Proxy</a>
+<nav><a href="index.html">Home</a><a href="getting-started.html" aria-current="page">Getting started</a><a href="reference.html">Reference</a><a href="how-it-works.html">How it works</a><a class="gh" href="https://github.com/lerenn/paseo-github-proxy" aria-label="GitHub" title="GitHub"><svg viewBox="0 0 16 16" width="20" height="20" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a></nav>
+</div></header>
+<main>
+
+<h1>Getting started</h1>
+<p class="lead">Install the plugin, connect GitHub, allow an owner. Agents can read right away; you enable writes when you want them.</p>
+<ul>
+<li>Paseo 0.17 or later (the plugin declares <code>&gt;=0.17.0</code>).</li>
+<li>Plugins enabled on the daemon: Settings → Plugins → Enable plugins, or <code>pluginsEnabled: true</code> in the daemon's <code>config.json</code>.</li>
+<li>For the <code>gh</code> source: the GitHub CLI installed and logged in on the daemon machine. For the App source: a GitHub App installed on your account or organization.</li>
+</ul>
+<div class="note warn">Plugins are trusted, unsandboxed code. The server part runs on the daemon machine, runs <code>gh</code> when you choose that source, and stores the App private key there.</div>
+
+<h2 id="install">1. Install the plugin</h2>
+<pre><code>paseo plugin install github:lerenn/paseo-github-proxy</code></pre>
+<p>Check that <code>paseo plugin ls</code> shows <code>paseo-github-proxy</code> as <code>running</code>, then open <strong>GitHub Proxy</strong> in the sidebar (or Command Center → "Open GitHub Proxy"). Sessions already open pick up the tools when they next reopen.</p>
+
+<h2 id="auth">2. Choose a credential source</h2>
+<p>Open the <strong>Auth</strong> tab and pick <strong>one</strong> active source.</p>
+<h3 id="gh">Local gh CLI</h3>
+<pre><code>gh auth login</code></pre>
+<p>Run it on the machine where the Paseo daemon runs, then press <strong>Check gh</strong>. The plugin reads the token with <code>gh auth token</code> and keeps it for five minutes. It stores nothing.</p>
+<h3 id="app">GitHub App</h3>
+<p>Create a GitHub App with the permissions you need (for the PR workflow: Contents, Pull requests, Issues and Checks, plus Metadata read; write only where you want writes) and install it. Then enter:</p>
+<table>
+<tr><th>Field</th><th>Where to find it</th></tr>
+<tr><td>App ID</td><td>The App's settings page.</td></tr>
+<tr><td>Installation ID</td><td>The number at the end of the installation URL, <code>/settings/installations/&lt;id&gt;</code>.</td></tr>
+<tr><td>Private key</td><td>Generate one on the App's settings page and paste the PEM.</td></tr>
+</table>
+<div class="note">The key is write-only. It is saved to <code>secrets.json</code> (mode <code>0600</code>) in the plugin's data directory on the daemon machine, never written to the config, never logged, and never sent back to the app: the page only shows a fingerprint. Paseo has no secret vault for plugins, so keep the daemon's home private.</div>
+<p>Press <strong>Test connection</strong>. Optionally turn on <strong>Fall back to the other source on rate limit</strong>: when the active source is exhausted, calls use the other one until its limit resets.</p>
+
+<h2 id="owners">3. Allow owners</h2>
+<p>In <strong>Auth → Allowed owners</strong>, add the GitHub users and organizations agents may act on, for example <code>acme</code> and <code>lerenn</code>. <code>*</code> allows every owner. <strong>While the list is empty every call is refused.</strong></p>
+
+<h2 id="policy">4. Set the policy</h2>
+<p>The <strong>Policy</strong> tab starts on <strong>Read-only</strong>. Pick a preset, adjust individual permissions, and add rules:</p>
+<pre><code>Preset: PR workflow
+Rule 1  deny   acme/prod     merge, delete_branch, force_push   "humans merge prod"
+Rule 2  allow  lerenn/*      merge</code></pre>
+<p>Use <strong>Test this call</strong> to see what the policy says about a REST path or GraphQL query without sending anything.</p>
+
+<h2 id="try">5. Try it</h2>
+<p>Ask any agent to list the open pull requests of a repository. In the <strong>Activity</strong> tab you will see the call as <em>Allowed</em>; ask again within 30 seconds and it shows as <em>Cached</em>. Ask it to merge one under Read-only and it shows as <em>Denied</em> with the reason the agent received.</p>
+
+<h2 id="soft">Optional: steer agents away from gh and curl</h2>
+<p>In <strong>Policy → Behaviour</strong>, turn on <strong>Forbid direct use of gh, curl and raw GitHub</strong>. An instruction is added to every agent's system prompt and to each tool description telling it to use the <code>github_*</code> tools. It is a soft rule, not a sandbox, and applies to sessions opened after you change it.</p>
+
+</main>
+<footer class="site"><div class="inner">Paseo GitHub Proxy is a plugin for <a href="https://paseo.sh">Paseo</a>. Source on <a href="https://github.com/lerenn/paseo-github-proxy">GitHub</a>.</div></footer>
+</body>
+</html>

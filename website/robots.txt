@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://lerenn.github.io/paseo-github-proxy/sitemap.xml
