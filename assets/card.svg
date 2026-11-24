@@ -1,0 +1,29 @@
+<!-- Card thumbnail for the paseo.sh listing. Rendered to card.png by .github/scripts/render-assets.mjs (headless Chrome), after the screenshots. -->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1600" height="1000" viewBox="0 0 1600 1000">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#232833"/><stop offset="1" stop-color="#14171d"/>
+    </linearGradient>
+    <clipPath id="frame"><rect x="790" y="120" width="760" height="760" rx="28"/></clipPath>
+  </defs>
+  <rect width="1600" height="1000" fill="url(#bg)"/>
+  <image x="90" y="150" width="140" height="140" xlink:href="icon.png"/>
+  <g font-family="Liberation Sans, Arial, sans-serif" fill="#ffffff">
+    <text x="90" y="420" font-size="92" font-weight="bold">Safe GitHub</text>
+    <text x="90" y="525" font-size="92" font-weight="bold">access for</text>
+    <text x="90" y="630" font-size="92" font-weight="bold" fill="#7fa6f5">every agent</text>
+    <g font-size="38" fill="#b7bfcc">
+      <text x="94" y="745">Cached, rate-limit-aware tools,</text>
+      <text x="94" y="797">allow/deny rules per repo and</text>
+      <text x="94" y="849">action, and a live activity log.</text>
+    </g>
+  </g>
+  <g clip-path="url(#frame)">
+    <rect x="790" y="120" width="760" height="760" fill="#2c3037"/>
+    <svg x="790" y="120" width="760" height="760" viewBox="576 195 1120 1030" preserveAspectRatio="xMidYMid meet">
+      <clipPath id="crop"><rect x="576" y="195" width="1120" height="1018"/></clipPath>
+      <image width="2000" height="1280" clip-path="url(#crop)" xlink:href="github-proxy-overview.png"/>
+    </svg>
+  </g>
+  <rect x="790" y="120" width="760" height="760" rx="28" fill="none" stroke="#4a5060" stroke-width="3"/>
+</svg>

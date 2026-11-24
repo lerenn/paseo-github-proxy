@@ -3,6 +3,22 @@
   "name": "GitHub Proxy",
   "description": "Give every agent policy-controlled, rate-limit-aware GitHub tools instead of raw gh and curl: cached reads, allow/deny rules per repo and action, and a live activity log.",
   "icon": "assets/icon.png",
-  "requirements": { "paseo": ">=0.16.2" },
-  "media": []
+  "requirements": {
+    "paseo": ">=0.16.2"
+  },
+  "media": [
+    "assets/card.png",
+    "assets/github-proxy-overview.png",
+    "assets/github-proxy-policy.png",
+    "assets/github-proxy-auth.png",
+    "assets/github-proxy-activity.png"
+  ],
+  "translations": {
+    "fr": {
+      "description": "Donnez à chaque agent des outils GitHub contrôlés par des règles et attentifs aux limites de débit, à la place de gh et curl bruts : lectures en cache, règles d'autorisation et de refus par dépôt et par action, et un journal d'activité en direct."
+    },
+    "zh-CN": {
+      "description": "为每个智能体提供受策略控制、感知速率限制的 GitHub 工具，取代原始的 gh 和 curl：缓存读取、按仓库和操作设置的允许/拒绝规则，以及实时活动日志。"
+    }
+  }
 }
