@@ -46,9 +46,9 @@
 <h3 id="presets">Presets</h3>
 <table>
 <tr><th>Preset</th><th>Allows by default</th></tr>
-<tr><td>Read-only (default)</td><td><code>read</code>, <code>generic_api_read</code></td></tr>
+<tr><td>Read-only</td><td><code>read</code>, <code>generic_api_read</code></td></tr>
 <tr><td>PR workflow</td><td>Read-only plus <code>comment</code>, <code>review</code>, <code>create_issue</code>, <code>create_pr</code>, <code>update_pr</code>, <code>create_branch</code>, <code>manage_labels</code>, <code>manage_notifications</code>, <code>subscribe_events</code></td></tr>
-<tr><td>Full</td><td>Every action</td></tr>
+<tr><td>Full (default on a fresh install)</td><td>Every action, including <code>generic_api_read</code> and <code>generic_api_write</code></td></tr>
 </table>
 <p>Changing an individual permission makes the policy <em>Custom</em> unless it matches a preset.</p>
 <p>Upgrading: an action added after your policy was saved is allowed where an implying action is allowed, in the default permissions and in rules that list actions: <code>create_branch</code> where <code>create_pr</code> is, <code>manage_labels</code> where <code>update_pr</code> is, <code>subscribe_events</code> where <code>comment</code> is. Destructive and admin actions (<code>write_file</code>, releases, Actions, variables, repository creation and editing, gists, notifications, projects) are never implied; check them yourself. A denial names the action and the rule or default policy, and tells the agent to ask you to enable it in the Policy tab.</p>
@@ -85,7 +85,7 @@
 <tr><td>Fall back to the other source on rate limit</td><td>Auth</td><td>off</td></tr>
 <tr><td>Allowed owners</td><td>Auth</td><td><code>*</code> (every owner)</td></tr>
 <tr><td>GitHub Apps (organization, App ID, installation ID, also-serves owners, default) and their private keys</td><td>Auth</td><td>none</td></tr>
-<tr><td>Preset, default permissions, rules</td><td>Policy</td><td>Read-only, no rules</td></tr>
+<tr><td>Preset, default permissions, rules</td><td>Policy</td><td>Full, no rules</td></tr>
 <tr><td>Cache TTL in seconds (0 to 3600)</td><td>Policy</td><td>30</td></tr>
 <tr><td>Forbid direct use of gh, curl and raw GitHub</td><td>Policy</td><td>off</td></tr>
 <tr><td>Block gh/curl commands (hard)</td><td>Policy</td><td>off</td></tr>

@@ -13,7 +13,7 @@ const app = (id: string, owners: string[] = [], isDefault = false): AppEntry => 
 
 function setup(configPatch: Partial<Config> = {}, replies: Reply[] = [], apps: AppEntry[] = [app("app", [], true)]) {
   let now = 1_000_000;
-  const config: Config = { ...defaultConfig(), allowedOwners: ["acme"], ...configPatch };
+  const config: Config = { ...defaultConfig(), policy: presetPolicy("read_only"), allowedOwners: ["acme"], ...configPatch };
   const queue = [...replies];
   const calls: { url: string; method: string; headers: Record<string, string>; body?: string }[] = [];
   const fetchFn: FetchFn = vi.fn(async (url, init) => {

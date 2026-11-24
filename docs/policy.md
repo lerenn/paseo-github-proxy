@@ -65,7 +65,7 @@ A policy keeps the action list it was saved with. So that a new action does not 
 | `manage_labels` | `update_pr` (it already labels pull requests and issues) |
 | `subscribe_events` | `comment` |
 
-Every other new action (`write_file`, `manage_release`, `manage_actions`, `manage_variables`, `create_repo`, `edit_repo`, `manage_gists`, `manage_notifications`, `manage_project`) is never implied: it stays denied until you check it. Read-only stays read-only. Once the policy is migrated or saved from the Policy tab it is stamped with the current version, so an action you uncheck later is not granted again.
+Every other new action (`write_file`, `manage_release`, `manage_actions`, `manage_variables`, `create_repo`, `edit_repo`, `manage_gists`, `manage_notifications`, `manage_project`) is never implied: it stays denied until you check it. Read-only stays read-only. A fresh install (no saved policy) starts on the Full preset instead, see [Default full policy](adrs/2026-11-24-default-full-policy.md); picking Read-only in the Policy tab switches back. Once the policy is migrated or saved from the Policy tab it is stamped with the current version, so an action you uncheck later is not granted again.
 
 A denial names the action, the rule or the default policy, and where to enable it (the Policy tab). For `create_branch` and `write_file` it also notes that plain git commands are not affected by the policy.
 

@@ -84,11 +84,11 @@ export const PRESETS = ["read_only", "pr_workflow", "full"] as const;
 export type Preset = (typeof PRESETS)[number];
 
 export const PRESET_INFO: Record<Preset, { label: string; hint: string; allow: readonly Action[] }> = {
-  read_only: { label: "Read-only", hint: "Agents can look but not touch. The default.", allow: ["read", "generic_api_read"] },
+  read_only: { label: "Read-only", hint: "Agents can look but not touch. The safe choice for a shared setup.", allow: ["read", "generic_api_read"] },
   pr_workflow: {
     label: "PR workflow",
     hint: "Read, comment, review, open issues and PRs and update them, create branches, manage labels and notifications. No merge, no branch deletion, no force push, no file writes, no releases, no workflow runs, no generic writes.",
     allow: ["read", "generic_api_read", "comment", "review", "create_issue", "create_pr", "update_pr", "create_branch", "manage_labels", "manage_notifications", "subscribe_events"],
   },
-  full: { label: "Full", hint: "Everything is allowed. Use the rules to carve out exceptions.", allow: ACTIONS },
+  full: { label: "Full", hint: "Everything in the catalog is allowed, including generic API writes. The default on a fresh install. Use the rules to carve out exceptions.", allow: ACTIONS },
 };

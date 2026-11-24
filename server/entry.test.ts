@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import contribute from "../index.server";
 import { activityRpc, appCredentialsClearRpc, appCredentialsSaveRpc, subscriptionsRpc, webhookSecretRpc, webhookStatusRpc, configGetRpc, configSaveRpc, dryRunRpc, overviewRpc, sourceCheckRpc } from "../shared/contracts";
-import { defaultConfig } from "../shared/config";
+import { defaultConfig, presetPolicy } from "../shared/config";
 import { HARD_RULE_MESSAGE } from "./hardrule";
 import { SOFT_RULE_METADATA_KEY, SOFT_RULE_PROMPT } from "./tools";
 
@@ -105,7 +105,7 @@ describe("server entry", () => {
 
   it("config persists across a reload and never exposes secrets", async () => {
     const first = load();
-    await first.rpc(configSaveRpc, { config: { ...defaultConfig(), allowedOwners: ["acme"], cacheTtlSeconds: 90 } });
+    await first.rpc(configSaveRpc, { config: { ...defaultConfig(), policy: presetPolicy("read_only"), allowedOwners: ["acme"], cacheTtlSeconds: 90 } });
     first.cleanup();
     const second = load();
     const got = await second.rpc(configGetRpc);
@@ -115,7 +115,7 @@ describe("server entry", () => {
 
   it("answers the dry run, the overview and the activity log", async () => {
     const { rpc } = load();
-    await rpc(configSaveRpc, { config: { ...defaultConfig(), allowedOwners: ["acme"] } });
+    await rpc(configSaveRpc, { config: { ...defaultConfig(), policy: presetPolicy("read_only"), allowedOwners: ["acme"] } });
     expect(await rpc(dryRunRpc, { kind: "rest", method: "PUT", path: "/repos/acme/x/pulls/1/merge" })).toMatchObject({ allowed: false, actions: ["merge", "generic_api_write"] });
     expect(await rpc(dryRunRpc, { kind: "rest", method: "GET", path: "/repos/acme/x/pulls" })).toMatchObject({ allowed: true });
     expect((await rpc(overviewRpc)).sources.map((s: { source: string }) => s.source)).toEqual(["gh", "app"]);

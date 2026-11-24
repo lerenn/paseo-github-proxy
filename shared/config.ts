@@ -65,7 +65,7 @@ export const configSchema = z.object({
   /** The hard rule: deny permission requests for gh, and curl or wget aimed at GitHub. Off by default. */
   blockRawGithub: z.boolean().default(false),
   webhooks: webhooksSchema.default({ enabled: false, port: 8787, bind: "127.0.0.1" }),
-  policy: policySchema.default({ preset: "read_only", defaultAllow: [...PRESET_INFO.read_only.allow], rules: [], actionsVersion: CATALOG_VERSION }),
+  policy: policySchema.default({ preset: "full", defaultAllow: [...PRESET_INFO.full.allow], rules: [], actionsVersion: CATALOG_VERSION }),
 });
 export type Config = z.infer<typeof configSchema>;
 

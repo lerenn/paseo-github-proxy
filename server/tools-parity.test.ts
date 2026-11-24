@@ -10,7 +10,7 @@ import { buildTools } from "./tools";
 type Reply = { status?: number; body?: unknown; text?: string };
 
 function make(config: Partial<Config>, replies: Reply[] = []) {
-  const cfg: Config = { ...defaultConfig(), allowedOwners: ["acme"], ...config };
+  const cfg: Config = { ...defaultConfig(), policy: presetPolicy("read_only"), allowedOwners: ["acme"], ...config };
   const queue = [...replies];
   const calls: { url: string; method: string; body?: string; accept?: string }[] = [];
   const fetchFn: FetchFn = vi.fn(async (url, init) => {
