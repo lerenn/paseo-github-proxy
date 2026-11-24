@@ -35,15 +35,43 @@ function searchOwners(query: string): { owners: string[]; scoped: boolean } {
 /** Maps a REST write to the specific actions it performs (on top of generic_api_write). */
 function restWriteActions(method: string, rest: string, body: unknown): Action[] {
   const b = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+  const edit = method === "PATCH" || method === "PUT" || method === "POST" || method === "DELETE";
   if (method === "POST" && /^\/issues$/.test(rest)) return ["create_issue"];
   if (method === "POST" && /^\/(issues|pulls)\/\d+\/comments$/.test(rest)) return ["comment"];
+  if (method === "POST" && /^\/pulls\/\d+\/comments\/\d+\/replies$/.test(rest)) return ["comment"];
   if (method === "POST" && /^\/pulls\/\d+\/reviews(\/\d+\/events)?$/.test(rest)) return ["review"];
   if (method === "POST" && /^\/pulls$/.test(rest)) return ["create_pr"];
   if ((method === "PATCH" || method === "PUT") && /^\/(pulls|issues)\/\d+$/.test(rest)) return ["update_pr"];
+  // Labels, assignees, lock, reviewers, branch update and comment edits are all edits of an issue or a pull request.
+  if (edit && /^\/issues\/\d+\/(labels|assignees)(\/[^/]+)?$/.test(rest)) return ["update_pr"];
+  if ((method === "PUT" || method === "DELETE") && /^\/issues\/\d+\/lock$/.test(rest)) return ["update_pr"];
+  if ((method === "POST" || method === "DELETE") && /^\/pulls\/\d+\/requested_reviewers$/.test(rest)) return ["update_pr"];
+  if (method === "PUT" && /^\/pulls\/\d+\/update-branch$/.test(rest)) return ["update_pr"];
+  if ((method === "PATCH" || method === "DELETE") && /^\/(issues|pulls)\/comments\/\d+$/.test(rest)) return ["update_pr"];
   if (method === "PUT" && /^\/pulls\/\d+\/merge$/.test(rest)) return ["merge"];
   if (method === "POST" && /^\/merges$/.test(rest)) return ["merge"];
+  if (method === "POST" && /^\/merge-upstream$/.test(rest)) return ["merge"];
   if (method === "DELETE" && /^\/git\/refs\//.test(rest)) return ["delete_branch"];
+  if (method === "POST" && /^\/git\/refs$/.test(rest)) return ["create_branch"];
   if (method === "PATCH" && /^\/git\/refs\//.test(rest) && b.force === true) return ["force_push"];
+  if ((method === "PUT" || method === "DELETE") && /^\/contents\//.test(rest)) return ["write_file"];
+  if (edit && /^\/labels(\/[^/]+)?$/.test(rest)) return ["manage_labels"];
+  if (edit && /^\/releases(\/.*)?$/.test(rest)) return ["manage_release"];
+  if (edit && /^\/actions\/(runs|jobs|workflows|caches|artifacts)(\/.*)?$/.test(rest)) return ["manage_actions"];
+  if (edit && /^\/(actions|environments\/[^/]+)\/(variables|secrets)(\/.*)?$/.test(rest)) return ["manage_variables"];
+  if (method === "PATCH" && rest === "") return ["edit_repo"];
+  if (method === "PUT" && /^\/topics$/.test(rest)) return ["edit_repo"];
+  if (method === "POST" && /^\/forks$/.test(rest)) return ["create_repo"];
+  if (edit && /^\/notifications(\/.*)?$/.test(rest)) return ["manage_notifications"];
+  return [];
+}
+
+/** The same for writes on paths that are not under /repos/{owner}/{repo}. */
+function accountWriteActions(method: string, path: string): Action[] {
+  if (method === "POST" && (/^\/orgs\/[^/]+\/repos$/.test(path) || path === "/user/repos")) return ["create_repo"];
+  if (/^\/orgs\/[^/]+\/actions\/(variables|secrets)(\/.*)?$/.test(path) && method !== "GET") return ["manage_variables"];
+  if (/^\/gists(\/.*)?$/.test(path)) return ["manage_gists"];
+  if (/^\/notifications(\/.*)?$/.test(path)) return ["manage_notifications"];
   return [];
 }
 
@@ -61,7 +89,7 @@ export function classifyRest(methodIn: string, pathIn: string, body?: unknown): 
     return { repo, owners: [owner.toLowerCase()], actions: base(read ? [] : restWriteActions(method, repoMatch[3] ?? "", body)) };
   }
   const scoped = /^\/(?:orgs|users)\/([^/]+)/.exec(path);
-  if (scoped) return { repo: "", owners: [scoped[1]!.toLowerCase()], actions: base([]) };
+  if (scoped) return { repo: "", owners: [scoped[1]!.toLowerCase()], actions: base(read ? [] : accountWriteActions(method, path)) };
   if (path.startsWith("/search/")) {
     const { owners, scoped: hasScope } = searchOwners(query);
     return {
@@ -72,7 +100,7 @@ export function classifyRest(methodIn: string, pathIn: string, body?: unknown): 
     };
   }
   if (read && (path === "/rate_limit" || path === "/user")) return { repo: "", owners: [], actions: ["generic_api_read"] };
-  return { repo: "", owners: [], actions: base([]), unscoped: `the path ${path} is not scoped to an owner (use /repos/{owner}/{repo}/..., /orgs/{org}/... or /users/{user}/...)` };
+  return { repo: "", owners: [], actions: base(read ? [] : accountWriteActions(method, path)), unscoped: `the path ${path} is not scoped to an owner (use /repos/{owner}/{repo}/..., /orgs/{org}/... or /users/{user}/...)` };
 }
 
 const MUTATION_ACTIONS: Record<string, Action> = {
@@ -92,6 +120,20 @@ const MUTATION_ACTIONS: Record<string, Action> = {
   closeIssue: "update_pr",
   reopenIssue: "update_pr",
   deleteRef: "delete_branch",
+  createRef: "create_branch",
+  markPullRequestReadyForReview: "update_pr",
+  convertPullRequestToDraft: "update_pr",
+  disablePullRequestAutoMerge: "merge",
+  resolveReviewThread: "review",
+  unresolveReviewThread: "review",
+  addLabelsToLabelable: "update_pr",
+  removeLabelsFromLabelable: "update_pr",
+  addProjectV2ItemById: "manage_project",
+  updateProjectV2ItemFieldValue: "manage_project",
+  archiveProjectV2Item: "manage_project",
+  unarchiveProjectV2Item: "manage_project",
+  deleteProjectV2Item: "manage_project",
+  clearProjectV2ItemFieldValue: "manage_project",
 };
 
 /** Removes comments and string literals so that braces and keywords inside them do not count. */

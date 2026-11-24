@@ -69,3 +69,15 @@ describe("ownerAllowed", () => {
     expect(ownerAllowed(["*"], "")).toBe(false);
   });
 });
+
+describe("presets", () => {
+  it("read-only grants only reads; the PR workflow never grants a high or generic write action", async () => {
+    const { ACTION_INFO, PRESET_INFO } = await import("../shared/actions");
+    expect(PRESET_INFO.read_only.allow).toEqual(["read", "generic_api_read"]);
+    for (const a of PRESET_INFO.pr_workflow.allow) expect(["safe", "low", "medium"]).toContain(ACTION_INFO[a].risk);
+    expect(PRESET_INFO.pr_workflow.allow).not.toContain("generic_api_write");
+    for (const a of ["merge", "write_file", "manage_release", "manage_actions", "manage_variables", "create_repo", "edit_repo", "manage_gists", "manage_project"] as const) expect(PRESET_INFO.pr_workflow.allow).not.toContain(a);
+    expect(evaluateAction(presetPolicy("pr_workflow"), "acme/web", "create_branch").allowed).toBe(true);
+    expect(evaluateAction(presetPolicy("pr_workflow"), "acme/web", "manage_release").message).toMatch(/Manage releases.*Do not retry/);
+  });
+});

@@ -7,6 +7,7 @@ A [Paseo](https://paseo.sh) plugin that gives every agent policy-controlled, cac
 - **Fewer API calls.** A shared in-memory and on-disk cache with ETag revalidation, so many agents asking the same thing cost one request.
 - **Rate limits handled.** Live remaining/limit per credential source, a "retry at HH:MM" error to the agent when exhausted, one limit per GitHub App, optional fallback to the other credential source.
 - **Clear denials.** The agent is told which rule denied a call and why, so it stops retrying.
+- **Parity with `gh`.** Pull requests, issues, commits, files, releases, workflow runs and logs, labels, gists, projects, secret names and variables, rulesets, organizations and notifications, each as a typed tool with its own policy action. [docs/gh-parity.md](docs/gh-parity.md) lists every `gh` command and what is left out and why.
 - **A full-screen page** (sidebar → GitHub Proxy) with Overview, Auth, Policy and Activity tabs.
 
 The logic is a TypeScript port of an internal Go service (GitHub App JWT and installation tokens, REST/GraphQL access, ETag cache, rate-limit handling, policy and owner allowlist). It runs inside the plugin server: no external service.
@@ -54,7 +55,7 @@ Presets:
 | Preset | Allows |
 | --- | --- |
 | **Read-only** (default) | read, generic API read |
-| **PR workflow** | the above + comment, review, create issue, create PR, update PR |
+| **PR workflow** | the above + comment, review, create issue, create PR, update PR, create branch, manage labels, manage notifications |
 | **Full** | everything |
 
 Then adjust the default permissions in one checklist dropdown (checked means allowed), and add rules. A rule has an effect (allow or deny), repositories, actions (both checkable dropdowns) and an optional reason shown to the agent. The repository dropdown lists the repositories of the allowed owners that the policy lets agents read (first 100 per owner, cached; if listing fails you still can type); type a pattern such as `acme/*` or `acme/web-*` for the rest. A matching **deny** rule always wins, then an **allow** rule, then the defaults.
@@ -65,7 +66,7 @@ Examples:
 - PR workflow everywhere, never merge or delete branches in prod: preset *PR workflow* + deny rule `acme/prod` for `merge, delete_branch, force_push`, reason "humans merge prod".
 - Everything allowed except force pushes: preset *Full* + deny rule `*` for `force_push`.
 
-Actions: `read`, `comment`, `review`, `create_issue`, `create_pr`, `update_pr`, `merge`, `delete_branch`, `force_push`, `generic_api_read`, `generic_api_write`. The generic `github_api` tool is classified from the request: a `PUT .../pulls/N/merge` needs `merge` **and** `generic_api_write`, so the generic tool never bypasses a rule on a specific action. The **Test this call** box shows the verdict for any REST path or GraphQL document without sending it.
+Actions: `read`, `comment`, `review`, `create_issue`, `create_pr`, `update_pr`, `merge`, `delete_branch`, `force_push`, `create_branch`, `write_file`, `manage_labels`, `manage_release`, `manage_actions`, `manage_variables`, `create_repo`, `edit_repo`, `manage_gists`, `manage_notifications`, `manage_project`, `generic_api_read`, `generic_api_write`. The reads of every tool are `read`; file writes, releases, workflow runs, variables, repository creation and edits, gists and projects are separate actions, none in the PR workflow preset. The generic `github_api` tool is classified from the request: a `PUT .../pulls/N/merge` needs `merge` **and** `generic_api_write`, so the generic tool never bypasses a rule on a specific action. The **Test this call** box shows the verdict for any REST path or GraphQL document without sending it.
 
 The same tab holds the **cache TTL** (30 s by default) and the **Forbid direct use of gh/curl/raw GitHub** checkbox, which adds an instruction to every agent's system prompt and tool descriptions to use the `github_*` tools. It is a soft rule, not a sandbox. The instruction says the `github_*` tools win over a project AGENTS.md that allows `gh`, unless you explicitly ask for `gh`. On Paseo 0.16 it is saved in the system prompt when an agent is created, so only agents created after you turn it on get it; from 0.17 it is also added each time a session opens.
 
@@ -73,23 +74,40 @@ The **Block gh/curl commands (hard)** checkbox (off by default) goes further tha
 
 ## Tools
 
-| Tool | Action |
-| --- | --- |
-| `github_policy` | Shows what the agent may do on a repo, and the rate-limit state |
-| `github_repo_info` | read |
-| `github_list_branches` | read |
-| `github_delete_branch` | delete_branch |
-| `github_list_prs`, `github_get_pr` (files, reviews, comments) | read |
-| `github_create_pr` | create_pr |
-| `github_update_pr` | update_pr |
-| `github_merge_pr` | merge |
-| `github_comment` | comment |
-| `github_review_pr` | review |
-| `github_list_issues`, `github_get_issue` | read |
-| `github_create_issue` | create_issue |
-| `github_checks` (check runs + commit status, by ref or PR) | read |
-| `github_search` (issues, PRs, code, repos, commits; needs a `repo`, `org` or `user` scope) | read |
-| `github_api` (REST or GraphQL) | generic_api_read / generic_api_write, plus the specific action it is classified as |
+Related operations are grouped behind one tool with an `operation` input (for example `github_actions` or `github_releases`), so an agent sees about thirty tools rather than a hundred. Each operation states its own action, so one tool can need `read` for one operation and `manage_actions` for another. `docs/gh-parity.md` maps every `gh` command to a tool.
+
+| Tool | What it does | Action |
+| --- | --- | --- |
+| `github_policy` | What you may do on a repo (every action allowed or denied, with the reason) and the active rate-limit state. | — |
+| `github_repo_info` | Description, default branch, visibility, topics, open issue count; include readme or languages. | `read` |
+| `github_list_branches` | List branches. | `read` |
+| `github_delete_branch` | Delete a branch. | `delete_branch` |
+| `github_list_prs` | List pull requests. | `read` |
+| `github_get_pr` | One pull request; include files, commits, reviews, comments, review threads or the raw diff. | `read` |
+| `github_create_pr` | Open a pull request. | `create_pr` |
+| `github_update_pr` | Edit, close or reopen a pull request. | `update_pr` |
+| `github_pr_manage` | Ready or draft, update the branch, auto-merge, request reviewers, reply to a review comment, resolve or unresolve a thread. | update_pr, merge, comment or review, by operation |
+| `github_merge_pr` | Merge a pull request; pass sha to refuse if the branch moved. | `merge` |
+| `github_review_pr` | Approve, request changes or comment, with optional line comments. | `review` |
+| `github_comment` | Comment on an issue or pull request. | `comment` |
+| `github_edit_comment` | Edit or delete an issue, pull request or review comment. | `update_pr` |
+| `github_list_issues` | List issues. | `read` |
+| `github_get_issue` | One issue, optionally with comments. | `read` |
+| `github_create_issue` | Open an issue. | `create_issue` |
+| `github_update_issue` | Edit, close or reopen an issue or PR; set, add or remove labels and assignees; lock or unlock. | `update_pr` |
+| `github_checks` | Check runs and commit status of a ref or pull request. | `read` |
+| `github_commits` | List commits, get one (files or raw diff), compare two refs. | `read` |
+| `github_contents` | Read a file or directory, list the tree; write or delete a file (a commit); create a branch. | read, write_file or create_branch, by operation |
+| `github_search` | Search issues, PRs, code, repos or commits. Needs a repo, org or user scope. | `read` |
+| `github_releases` | List, get, create, edit, delete releases; delete an asset. | read or manage_release, by operation |
+| `github_actions` | Workflows, runs, jobs, the end of job logs, artifacts and caches; re-run, cancel, dispatch, enable, disable, delete. | read or manage_actions, by operation |
+| `github_labels` | List, get, create, edit, delete repository labels. | read or manage_labels, by operation |
+| `github_repo_manage` | Create or fork a repository, edit its description, homepage, topics or default branch, sync a fork. | create_repo, edit_repo or merge, by operation |
+| `github_repo_config` | Rulesets, branch protection, environments, deploy keys, secret names, variables; set or delete variables, delete secrets. | read or manage_variables, by operation |
+| `github_account` | Users, organizations, members, teams, repositories of an owner, your account and organizations, notifications, mark as read. | read or manage_notifications, by operation |
+| `github_gists` | List, get, create, edit, delete gists. | read or manage_gists, by operation |
+| `github_project` | List and view GitHub Projects (v2), list items; add an item, set a field. | read or manage_project, by operation |
+| `github_api` | REST or GraphQL for what the others do not cover. | generic_api_read / generic_api_write + the specific action |
 
 `repo` can be omitted: it is inferred from the agent's working directory (`origin` remote).
 

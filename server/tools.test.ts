@@ -44,7 +44,7 @@ describe("tools", () => {
   it("exposes the curated surface and the generic tool", () => {
     const { tools } = make({}, []);
     expect(tools.map((t) => t.name).sort()).toEqual(
-      ["github_api", "github_checks", "github_comment", "github_create_issue", "github_create_pr", "github_delete_branch", "github_get_issue", "github_get_pr", "github_list_branches", "github_list_issues", "github_list_prs", "github_merge_pr", "github_policy", "github_repo_info", "github_review_pr", "github_search", "github_update_pr"].sort(),
+      ["github_api", "github_checks", "github_comment", "github_create_issue", "github_create_pr", "github_delete_branch", "github_get_issue", "github_get_pr", "github_list_branches", "github_list_issues", "github_list_prs", "github_merge_pr", "github_policy", "github_repo_info", "github_review_pr", "github_search", "github_update_pr", "github_commits", "github_contents", "github_update_issue", "github_pr_manage", "github_edit_comment", "github_releases", "github_actions", "github_labels", "github_repo_manage", "github_repo_config", "github_account", "github_gists", "github_project"].sort(),
     );
   });
 
