@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SOURCE_OPTIONS, countdown, percent, presetOf, splitList, summarize, toggleChecked, withAlpha } from "./format";
+import { SOURCE_OPTIONS, appSummary, toggleOpen, countdown, percent, presetOf, splitList, summarize, toggleChecked, withAlpha } from "./format";
 
 describe("format", () => {
   it("counts down", () => {
@@ -39,5 +39,15 @@ describe("format", () => {
 describe("source options", () => {
   it("lists both sources once, gh first", () => {
     expect(SOURCE_OPTIONS.map((o) => o.id)).toEqual(["gh", "app"]);
+  });
+  it("summarizes a collapsed App row", () => {
+    expect(appSummary({ owners: ["acme"], appId: "1", default: false })).toBe("acme · App 1");
+    expect(appSummary({ owners: ["a", "b"], appId: "1", default: true })).toBe("2 owners · App 1");
+    expect(appSummary({ owners: [], appId: "", default: true })).toBe("Rest");
+    expect(appSummary({ owners: [], appId: "2", default: false })).toBe("No owner · App 2");
+  });
+  it("toggles open entries", () => {
+    expect(toggleOpen([], "a")).toEqual(["a"]);
+    expect(toggleOpen(["a", "b"], "a")).toEqual(["b"]);
   });
 });
