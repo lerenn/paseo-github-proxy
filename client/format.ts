@@ -1,4 +1,13 @@
 import type { SourceId } from "../shared/config";
+
+export type BehaviourWarning = "clientApiOff" | "clientApiNoInject";
+
+/** Warnings for the Behaviour card: a forbid rule is on but agents have no policy-controlled path for gh and git. */
+export function behaviourWarnings(c: { forbidRawGithub: boolean; blockRawGithub: boolean; clientApi: { enabled: boolean; injectEnv: boolean } }): BehaviourWarning[] {
+  if (!c.forbidRawGithub && !c.blockRawGithub) return [];
+  if (!c.clientApi.enabled) return ["clientApiOff"];
+  return c.clientApi.injectEnv ? [] : ["clientApiNoInject"];
+}
 /** "in 4m 12s", "in 59s", "now": time left until an epoch ms. */
 export function countdown(until: number, now: number): string {
   const s = Math.max(0, Math.ceil((until - now) / 1000));

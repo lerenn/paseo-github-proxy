@@ -6,7 +6,7 @@ import { Pressable, Text, View } from "react-native";
 import { ACTIONS, ACTION_INFO, PRESET_INFO, PRESETS, type Action, type Preset } from "../shared/actions";
 import { presetPolicy, type Config, type Policy, type Rule } from "../shared/config";
 import { dryRunRpc } from "../shared/contracts";
-import { presetOf, summarize, withAlpha } from "./format";
+import { behaviourWarnings, presetOf, summarize, withAlpha } from "./format";
 import { useRepoChoices, type useConfigData } from "./data";
 import { Banner, BannerText, Button, Card, Field, Heading, Muted, MultiSelect, Pill, Segmented, Toggle, toneColor, type Theme, type Tone } from "./ui-kit";
 
@@ -169,7 +169,7 @@ export function PolicyTab({ theme, data }: { theme: Theme; data: ConfigData }) {
           value={config.forbidRawGithub}
           onChange={(v) => data.change((c) => ({ ...c, forbidRawGithub: v }))}
           label="Forbid direct use of gh, curl and raw GitHub"
-          hint="Adds an instruction to every agent's system prompt and to each github_* tool description: use these tools instead of gh or curl. A soft rule, not a sandbox. It reaches agents created after you turn it on (and, on Paseo 0.17 or later, sessions opened afterwards)."
+          hint="Adds an instruction to every agent's system prompt and to each github_* tool description: use these tools instead of gh or curl. With the Client API on, gh and git can still go through the plugin. A soft rule, not a sandbox. It reaches agents created after you turn it on (and, on Paseo 0.17 or later, sessions opened afterwards)."
         />
         <Toggle
           theme={theme}
@@ -178,6 +178,15 @@ export function PolicyTab({ theme, data }: { theme: Theme; data: ConfigData }) {
           label="Block gh/curl commands (hard)"
           hint="Denies a permission request for a shell command that runs gh, or curl or wget against github.com, and tells the agent to use the github_* tools. It only sees commands the agent asks permission for: an agent in a bypass or auto-approve mode never asks, so nothing is blocked there. It matches command words, it is not a sandbox: a script file or a command built at run time gets through. For a real block, add network or egress rules on the daemon machine."
         />
+        {behaviourWarnings(config).map((w) => (
+          <Banner key={w} theme={theme} tone="warn" icon="TriangleAlert">
+            <BannerText theme={theme}>
+              {w === "clientApiOff"
+                ? "The Client API (gh and git) is off. With gh and curl forbidden, agents only have the github_* tools: git push over HTTPS and gh commands have no path through the policy. Turn on the Client API in the Auth tab to give them one."
+                : "Agents will not get GH_PROXY_URL or the git credential helper unless it is set up by hand."}
+            </BannerText>
+          </Banner>
+        ))}
         <Field
           theme={theme}
           label="Cache TTL (seconds)"

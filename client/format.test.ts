@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SOURCE_OPTIONS, visibleSources, appSummary, toggleOpen, countdown, percent, presetOf, rejectedBreakdown, splitList, summarize, toggleChecked, withAlpha } from "./format";
+import { behaviourWarnings, SOURCE_OPTIONS, visibleSources, appSummary, toggleOpen, countdown, percent, presetOf, rejectedBreakdown, splitList, summarize, toggleChecked, withAlpha } from "./format";
 
 describe("rejectedBreakdown", () => {
   it("lists the reasons", () => {
@@ -63,5 +63,15 @@ describe("source options", () => {
     const gh = [{ key: "gh", active: true }, { key: "app:a", active: false }];
     expect(visibleSources(gh, false).map((s) => s.key)).toEqual(["gh"]);
     expect(visibleSources(gh, true)).toHaveLength(2);
+  });
+});
+
+describe("behaviourWarnings", () => {
+  const cfg = (forbid: boolean, block: boolean, enabled: boolean, injectEnv: boolean) => ({ forbidRawGithub: forbid, blockRawGithub: block, clientApi: { enabled, injectEnv } });
+  it("covers every combination", () => {
+    for (const forbid of [false, true]) for (const block of [false, true]) for (const enabled of [false, true]) for (const inject of [false, true]) {
+      const expected = !forbid && !block ? [] : !enabled ? ["clientApiOff"] : inject ? [] : ["clientApiNoInject"];
+      expect(behaviourWarnings(cfg(forbid, block, enabled, inject))).toEqual(expected);
+    }
   });
 });
