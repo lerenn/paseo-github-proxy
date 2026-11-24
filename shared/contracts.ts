@@ -161,6 +161,8 @@ export const clientApiStatusRpc = defineRpc({
     helperFound: z.boolean(),
     /** Why it could not be written, empty otherwise. */
     helperError: z.string().default(""),
+    /** Whether a GitHub App exists that could issue git tokens; without one git is left alone. */
+    gitAvailable: z.boolean().default(true),
     lastRequestAt: z.number().nullable(),
     counters: z.object({ requests: z.number(), denied: z.number(), unauthorized: z.number(), gitCredentials: z.number() }),
   }),

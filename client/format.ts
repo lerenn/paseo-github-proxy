@@ -1,5 +1,8 @@
 import type { SourceId } from "../shared/config";
 
+/** Whether the Client API card says git is left alone: the setup is on and the helper is in place, but no GitHub App could issue a token. */
+export const gitLeftAlone = (injectEnv: boolean, status: { helperFound: boolean; gitAvailable: boolean } | null | undefined): boolean => injectEnv && !!status && status.helperFound && !status.gitAvailable;
+
 export type BehaviourWarning = "clientApiOff" | "clientApiNoInject";
 
 /** Warnings for the Behaviour card: a forbid rule is on but agents have no policy-controlled path for gh and git. */

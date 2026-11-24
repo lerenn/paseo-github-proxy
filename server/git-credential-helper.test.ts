@@ -36,16 +36,30 @@ describe("git credential helper protocol", () => {
     expect(r).toEqual({ stdout: "", stderr: "", code: 0 });
   });
 
-  it("a refusal says why on stderr and tells git to quit instead of prompting", async () => {
-    const r = await run({ argv: ["get"], stdin: input, env: { GH_PROXY_URL: "http://x" }, fetch: reply(403, { error: "policy_denied", message: "Denied by rule #1. Do not retry." }) });
-    expect(r.stdout).toBe("quit=1\n");
+  it("never blocks git: a 503, a 403, an unreachable API, a timeout or an unset URL print nothing and exit 0", async () => {
+    const env = { GH_PROXY_URL: "http://x" };
+    const cases = [
+      reply(503, { error: "upstream_auth", message: "No GitHub App serves the owner" }),
+      reply(403, { error: "policy_denied", message: "Denied by rule #1. Do not retry." }),
+      vi.fn(async () => { throw new Error("ECONNREFUSED"); }),
+      vi.fn(async (_url: string, init: { signal: AbortSignal }) => new Promise((_, reject) => init.signal.addEventListener("abort", () => reject(new Error("timed out"))))),
+    ];
+    for (const fetch of cases) {
+      const r = await run({ argv: ["get"], stdin: input, env, fetch, timeoutMs: 20 });
+      expect(r).toEqual({ stdout: "", stderr: "", code: 0 });
+    }
+    expect(await run({ argv: ["get"], stdin: input, env: {}, fetch: reply(200, {}) })).toEqual({ stdout: "", stderr: "", code: 0 });
+  });
+
+  it("says why on stderr only in debug mode, and never prints the token", async () => {
+    const denied = reply(403, { error: "policy_denied", message: "Denied by rule #1. Do not retry." });
+    const r = await run({ argv: ["get"], stdin: input, env: { GH_PROXY_URL: "http://x", GH_PROXY_TOKEN: "secret-bearer", GH_PROXY_DEBUG: "1" }, fetch: denied });
+    expect(r.stdout).toBe("");
     expect(r.stderr).toMatch(/Denied by rule #1/);
-    expect(r.code).toBe(0);
-    const off = await run({ argv: ["get"], stdin: input, env: {}, fetch: reply(200, {}) });
-    expect(off.stdout).toBe("quit=1\n");
-    expect(off.stderr).toMatch(/GH_PROXY_URL/);
-    const down = await run({ argv: ["get"], stdin: input, env: { GH_PROXY_URL: "http://x" }, fetch: vi.fn(async () => { throw new Error("ECONNREFUSED"); }) });
-    expect(down.stderr).toMatch(/unreachable.*ECONNREFUSED/);
+    expect(r.stderr).not.toMatch(/secret-bearer/);
+    const prompt = await run({ argv: ["get"], stdin: input, env: { GH_PROXY_URL: "http://x", GIT_TERMINAL_PROMPT: "0" }, fetch: vi.fn(async () => { throw new Error("ECONNREFUSED"); }) });
+    expect(prompt.stderr).toMatch(/unreachable.*ECONNREFUSED/);
+    expect(prompt.code).toBe(0);
   });
 
   it("runs as a script: stdin in, stdout out", () => {

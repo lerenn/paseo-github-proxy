@@ -2,7 +2,7 @@ import { Icon } from "@getpaseo/plugin/client/ui";
 import { useState } from "react";
 import { Text, View } from "react-native";
 import { isLoopbackAddress, type Config } from "../shared/config";
-import { clock } from "./format";
+import { clock, gitLeftAlone } from "./format";
 import { Banner, BannerText, Button, Card, Field, Heading, Muted, Pill, Stat, Toggle, type Theme } from "./ui-kit";
 import { useClientApi, type useConfigData } from "./data";
 
@@ -59,8 +59,9 @@ export function ClientApiCard({ theme, config, data }: { theme: Theme; config: C
           </View>
           {status?.error ? <Banner theme={theme} tone="bad" icon="CircleX"><BannerText theme={theme}>{`The client API could not start: ${status.error}`}</BannerText></Banner> : null}
           <TokenRow theme={theme} api={api} />
-          <Toggle theme={theme} value={c.injectEnv} onChange={(v) => set({ injectEnv: v })} label="Set it up in every new agent session" hint="Adds GH_PROXY_URL, GH_PROXY_TOKEN and a git credential helper (git config through GIT_CONFIG_*) to the environment of agents. Only sessions opened after you change this (or reload the plugin) are affected." />
+          <Toggle theme={theme} value={c.injectEnv} onChange={(v) => set({ injectEnv: v })} label="Set it up in every new agent session" hint="Adds GH_PROXY_URL, GH_PROXY_TOKEN and, when a GitHub App is configured, a git credential helper (git config through GIT_CONFIG_*) to the environment of agents. The helper is added after your own git credential helpers: where they already have a credential they win and the plugin policy does not gate git; the plugin is asked only when they have none. Only sessions opened after you change this (or reload the plugin) are affected." />
           {c.injectEnv && status && !status.helperFound ? <Banner theme={theme} tone="warn" icon="TriangleAlert"><BannerText theme={theme}>The git credential helper could not be written to the plugin data directory{status.helperError ? ` (${status.helperError})` : ""}, so only GH_PROXY_URL and GH_PROXY_TOKEN are set: git push will not use it.</BannerText></Banner> : null}
+          {gitLeftAlone(c.injectEnv, status) ? <Banner theme={theme} tone="info" icon="Info"><BannerText theme={theme}>Git credentials need a GitHub App; none is configured, so git is left alone. gh calls still go through the plugin.</BannerText></Banner> : null}
           <View style={{ gap: 4 }}>
             <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12, fontWeight: "600" }}>URL agents use (GH_PROXY_URL)</Text>
             <Text selectable style={{ color: theme.colors.foreground, fontSize: 13, fontFamily: "monospace" }}>{status?.url ?? `http://${c.bind}:${c.port}`}</Text>

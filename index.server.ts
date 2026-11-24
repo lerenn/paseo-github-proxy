@@ -24,7 +24,7 @@ import { appKey } from "./server/apps";
 
 import { discoverOwners, discoverRepos } from "./server/discovery";
 import { createHardRuleHandler } from "./server/hardrule";
-import { clientEnv } from "./server/clientapi";
+import { clientEnv, gitCredentialsAvailable } from "./server/clientapi";
 import { createRuntime, nodeFetch } from "./server/runtime";
 import { buildTools, SOFT_RULE_METADATA_KEY, SOFT_RULE_PROMPT, withSoftRule } from "./server/tools";
 
@@ -61,7 +61,7 @@ export default function contribute(server: PluginServerContext) {
     const { forbidRawGithub, clientApi } = rt.store.get();
     // With the client API on, the session gets GH_PROXY_URL (and token) and a git credential helper. Launch-only: it
     // applies to sessions opened after the change.
-    const env = clientApi.enabled && clientApi.injectEnv ? clientEnv({ config: clientApi, token: rt.store.clientToken(), helperPath: rt.ensureHelper().path, nodePath: process.execPath, existing: request.env }) : null;
+    const env = clientApi.enabled && clientApi.injectEnv ? clientEnv({ config: clientApi, token: rt.store.clientToken(), helperPath: gitCredentialsAvailable(rt.store.apps()) ? rt.ensureHelper().path : null, nodePath: process.execPath, existing: request.env }) : null;
     // Hosts from 0.17 take per-open instructions; older ones ignore the field and rely on the saved prompt above.
     const saved = request.metadata?.[SOFT_RULE_METADATA_KEY] === true;
     return {

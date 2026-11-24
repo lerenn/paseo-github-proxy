@@ -7,7 +7,9 @@
 // Environment: GH_PROXY_URL (the plugin's client API) and GH_PROXY_TOKEN (its bearer token, if one is set).
 // `get` asks POST <GH_PROXY_URL>/v1/git-credential and prints the answer; `store` and `erase` do nothing.
 // A request that is not https://github.com/<owner>/<repo> gets no answer, so git tries the next helper.
-// A refusal prints the plugin's message on stderr and `quit=1` (and exits 0, which git needs to honor it), so git stops instead of asking for a password.
+// The helper never blocks git: when the plugin cannot give a token (no App serves the owner, the credential source is gh, a policy
+// denial, the API is off, unreachable or slow) it prints nothing and exits 0, so git moves on to its next helper or its prompt.
+// The reason goes to stderr only when GH_PROXY_DEBUG or GIT_TERMINAL_PROMPT is set. The token is never written to stderr.
 import { fileURLToPath } from "node:url";
 
 /** Parses git's `key=value` lines (up to the first blank line). */
@@ -21,24 +23,28 @@ export function parseAttrs(text) {
   return attrs;
 }
 
-/** Runs one invocation. Returns what to write on stdout and stderr, and the exit code. */
-export async function run({ argv, stdin, env, fetch: fetchFn = globalThis.fetch }) {
+const TIMEOUT_MS = 3000;
+
+/** Runs one invocation. Returns what to write on stdout and stderr, and the exit code (always 0). */
+export async function run({ argv, stdin, env, fetch: fetchFn = globalThis.fetch, timeoutMs = TIMEOUT_MS }) {
   const op = argv[0];
   if (op !== "get") return { stdout: "", stderr: "", code: 0 };
   const attrs = parseAttrs(stdin);
   if (attrs.protocol !== "https" || (attrs.host ?? "").toLowerCase() !== "github.com" || !attrs.path) return { stdout: "", stderr: "", code: 0 };
+  const debug = Boolean(env.GH_PROXY_DEBUG || env.GIT_TERMINAL_PROMPT);
+  const none = (reason) => ({ stdout: "", stderr: debug ? `git-credential-helper: ${reason}\n` : "", code: 0 });
   const base = (env.GH_PROXY_URL ?? "").replace(/\/+$/, "");
-  if (!base) return { stdout: "quit=1\n", stderr: "git-credential-helper: GH_PROXY_URL is not set (the GitHub Proxy client API is off, or this session was opened before it was enabled).\n", code: 0 };
+  if (!base) return none("GH_PROXY_URL is not set (the GitHub Proxy client API is off, or this session was opened before it was enabled).");
   let res;
   try {
     res = await fetchFn(`${base}/v1/git-credential`, {
       method: "POST",
       headers: { "content-type": "application/json", ...(env.GH_PROXY_TOKEN ? { authorization: `Bearer ${env.GH_PROXY_TOKEN}` } : {}) },
       body: JSON.stringify({ protocol: attrs.protocol, host: attrs.host, path: attrs.path }),
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (error) {
-    return { stdout: "quit=1\n", stderr: `git-credential-helper: the GitHub Proxy client API is unreachable at ${base}: ${error.message}\n`, code: 0 };
+    return none(`the GitHub Proxy client API is unreachable at ${base}: ${error.message}`);
   }
   let body = {};
   try {
@@ -46,10 +52,7 @@ export async function run({ argv, stdin, env, fetch: fetchFn = globalThis.fetch 
   } catch {
     /* keep the empty body */
   }
-  if (res.status === 404 && body.error === "not_served") return { stdout: "", stderr: "", code: 0 };
-  if (res.status !== 200 || !body.password) {
-    return { stdout: "quit=1\n", stderr: `git-credential-helper: refused (HTTP ${res.status}): ${body.message ?? body.error ?? "no answer"}\n`, code: 0 };
-  }
+  if (res.status !== 200 || !body.password) return none(`no token (HTTP ${res.status}): ${body.message ?? body.error ?? "no answer"}`);
   return { stdout: `username=${body.username ?? "x-access-token"}\npassword=${body.password}\n\n`, stderr: "", code: 0 };
 }
 

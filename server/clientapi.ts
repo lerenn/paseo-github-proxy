@@ -27,6 +27,8 @@ export interface ClientApiStatus {
   url: string;
   helperFound: boolean;
   helperError: string;
+  /** Whether a GitHub App exists that could issue git tokens; without one the git setup is skipped. */
+  gitAvailable: boolean;
   lastRequestAt: number | null;
   counters: ClientCounters;
 }
@@ -244,7 +246,7 @@ export class ClientApiServer {
   constructor(
     private readonly api: ClientApi,
     private readonly tokenSet: () => boolean,
-    private readonly helper: () => { found: boolean; error: string },
+    private readonly helper: () => { found: boolean; error: string; gitAvailable?: boolean },
     private readonly log: (message: string) => void = () => undefined,
     private readonly maxBody = CLIENT_MAX_BODY_BYTES,
   ) {}
@@ -310,6 +312,7 @@ export class ClientApiServer {
       url: clientApiUrl(this.current),
       helperFound: helper.found,
       helperError: helper.error,
+      gitAvailable: helper.gitAvailable ?? true,
       lastRequestAt: this.api.lastRequestAt,
       counters: { ...this.api.counters },
     };
@@ -352,11 +355,15 @@ export function clientApiUrl(config: Pick<ClientApiConfig, "bind" | "port">): st
   return `http://${host}:${config.port}`;
 }
 
+/** Git tokens come only from a GitHub App; with the gh CLI and no App configured, nothing can issue one. */
+export const gitCredentialsAvailable = (apps: readonly unknown[]): boolean => apps.length > 0;
+
 const shellQuote = (text: string): string => `'${text.replace(/'/g, `'\\''`)}'`;
 
 /**
  * The environment added to a new agent session: GH_PROXY_URL (and GH_PROXY_TOKEN), and git configuration through
  * GIT_CONFIG_COUNT / KEY_n / VALUE_n so `git fetch` and `git push` over HTTPS ask the plugin for a scoped token.
+ * Pass `helperPath: null` to leave git alone (no helper script, or no GitHub App that could issue a token).
  * The helper runs with `nodePath` (the node that runs the daemon), so no PATH is assumed.
  * Entries the session already has (an existing GIT_CONFIG_COUNT) are kept: the new ones are appended after them.
  */
@@ -365,7 +372,8 @@ export function clientEnv(input: { config: ClientApiConfig; token: string; helpe
   if (!input.helperPath) return env;
   const start = Math.max(0, Number.parseInt(input.existing?.GIT_CONFIG_COUNT ?? "0", 10) || 0);
   const entries: [string, string][] = [
-    ["credential.https://github.com.helper", ""], // forget the helpers inherited from other config levels: ours answers
+    // No empty value first: that would reset the helper list and drop the user's own helpers. Ours is appended and is
+    // asked only when the ones before it have no credential.
     ["credential.https://github.com.helper", `!${shellQuote(input.nodePath ?? "node")} ${shellQuote(input.helperPath)}`],
     ["credential.https://github.com.useHttpPath", "true"],
   ];
