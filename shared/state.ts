@@ -63,10 +63,27 @@ export const statsSchema = z.object({
 });
 export type Stats = z.infer<typeof statsSchema>;
 
+export const eventStatsSchema = z.object({
+  /** Every delivery that reached the listener: delivered + ignored + rejected. */
+  received: z.number(),
+  /** Events that woke at least one subscribed agent (counted once per event, not per subscription). */
+  delivered: z.number(),
+  /** Accepted with no subscriber (they only invalidated the cache), pings and event types the plugin does not use. */
+  ignored: z.number(),
+  badSignature: z.number(),
+  badOwner: z.number(),
+  duplicate: z.number(),
+  /** Events per minute for the last 30 minutes, oldest first. rejected = badSignature + badOwner + duplicate. */
+  series: z.array(z.object({ delivered: z.number(), ignored: z.number(), rejected: z.number() })),
+});
+export type EventStats = z.infer<typeof eventStatsSchema>;
+
 export const overviewSchema = z.object({
   now: z.number(),
   sources: z.array(sourceStatusSchema),
   stats: statsSchema,
+  /** The webhook event counters; `enabled` is whether the listener is turned on. */
+  events: z.object({ enabled: z.boolean(), stats: eventStatsSchema }),
   allowedOwnersEmpty: z.boolean(),
   warnings: z.array(z.string()),
 });

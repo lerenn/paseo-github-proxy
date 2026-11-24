@@ -36,7 +36,7 @@ export function createRuntime(dir = dataDir(), fetchFn: FetchFn = nodeFetch) {
     // Invalidation first (reads are fresh as soon as the event is accepted), then the wake-ups.
     onEvent: async (parsed) => {
       cache.invalidateWhere(staleKeyTest(parsed));
-      if (parsed.wake) await wake.dispatch(parsed.wake);
+      return parsed.wake ? await wake.dispatch(parsed.wake) : 0;
     },
     log: (m) => console.error(`[github-proxy] ${m}`),
   });

@@ -86,6 +86,27 @@ describe("WebhookReceiver", () => {
     expect(t.receiver.counters.ignored).toBe(2);
   });
 
+  it("classifies every delivery as delivered, ignored or rejected", async () => {
+    let woken = 0;
+    const receiver = new WebhookReceiver({ secrets: () => [{ app: acme, secret: "s-acme" }], apps: () => [acme, other], onEvent: () => woken, clock: () => 1000 });
+    const post = (body: string, headers: Record<string, string>) => receiver.handle({ method: "POST", path: "/webhook", headers, body: Buffer.from(body) });
+    const body = prBody();
+    const ok = (id: string, event = "pull_request") => ({ "x-github-event": event, "x-github-delivery": id, "x-hub-signature-256": sign("s-acme", body) });
+    woken = 2;
+    await post(body, ok("1")); // woke two agents: one delivered event
+    woken = 0;
+    await post(body, ok("2")); // accepted, nobody subscribed: ignored
+    await post(body, ok("3", "star")); // unused type: ignored
+    const ping = JSON.stringify({ zen: "x" });
+    await post(ping, { "x-github-event": "ping", "x-hub-signature-256": sign("s-acme", ping) }); // ignored
+    await post(body, { "x-github-event": "pull_request", "x-hub-signature-256": "sha256=" + "0".repeat(64) }); // bad signature
+    const foreign = prBody("other");
+    await post(foreign, { "x-github-event": "pull_request", "x-hub-signature-256": sign("s-acme", foreign) }); // wrong owner
+    await post(body, ok("1")); // duplicate
+    expect(receiver.events.stats()).toMatchObject({ received: 7, delivered: 1, ignored: 3, badSignature: 1, badOwner: 1, duplicate: 1 });
+    expect(receiver.events.stats().series.at(-1)).toEqual({ delivered: 1, ignored: 3, rejected: 3 });
+  });
+
   it("serves only POST /webhook and GET /healthz", async () => {
     const t = setup();
     expect((await t.post("", {}, "/healthz", "GET")).status).toBe(200);
