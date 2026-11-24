@@ -60,7 +60,7 @@ export function ClientApiCard({ theme, config, data }: { theme: Theme; config: C
           {status?.error ? <Banner theme={theme} tone="bad" icon="CircleX"><BannerText theme={theme}>{`The client API could not start: ${status.error}`}</BannerText></Banner> : null}
           <TokenRow theme={theme} api={api} />
           <Toggle theme={theme} value={c.injectEnv} onChange={(v) => set({ injectEnv: v })} label="Set it up in every new agent session" hint="Adds GH_PROXY_URL, GH_PROXY_TOKEN and a git credential helper (git config through GIT_CONFIG_*) to the environment of agents. Only sessions opened after you change this (or reload the plugin) are affected." />
-          {c.injectEnv && status && !status.helperFound ? <Banner theme={theme} tone="warn" icon="TriangleAlert"><BannerText theme={theme}>The git credential helper script was not found next to the plugin, so only GH_PROXY_URL and GH_PROXY_TOKEN are set: git push will not use it.</BannerText></Banner> : null}
+          {c.injectEnv && status && !status.helperFound ? <Banner theme={theme} tone="warn" icon="TriangleAlert"><BannerText theme={theme}>The git credential helper could not be written to the plugin data directory{status.helperError ? ` (${status.helperError})` : ""}, so only GH_PROXY_URL and GH_PROXY_TOKEN are set: git push will not use it.</BannerText></Banner> : null}
           <View style={{ gap: 4 }}>
             <Text style={{ color: theme.colors.foregroundMuted, fontSize: 12, fontWeight: "600" }}>URL agents use (GH_PROXY_URL)</Text>
             <Text selectable style={{ color: theme.colors.foreground, fontSize: 13, fontFamily: "monospace" }}>{status?.url ?? `http://${c.bind}:${c.port}`}</Text>

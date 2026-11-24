@@ -25,7 +25,7 @@ import { appKey } from "./server/apps";
 import { discoverOwners, discoverRepos } from "./server/discovery";
 import { createHardRuleHandler } from "./server/hardrule";
 import { clientEnv } from "./server/clientapi";
-import { createRuntime, helperPath, nodeFetch } from "./server/runtime";
+import { createRuntime, nodeFetch } from "./server/runtime";
 import { buildTools, SOFT_RULE_METADATA_KEY, SOFT_RULE_PROMPT, withSoftRule } from "./server/tools";
 
 const hostAppend = (request: object): string[] => {
@@ -61,7 +61,7 @@ export default function contribute(server: PluginServerContext) {
     const { forbidRawGithub, clientApi } = rt.store.get();
     // With the client API on, the session gets GH_PROXY_URL (and token) and a git credential helper. Launch-only: it
     // applies to sessions opened after the change.
-    const env = clientApi.enabled && clientApi.injectEnv ? clientEnv({ config: clientApi, token: rt.store.clientToken(), helperPath: helperPath(), existing: request.env }) : null;
+    const env = clientApi.enabled && clientApi.injectEnv ? clientEnv({ config: clientApi, token: rt.store.clientToken(), helperPath: rt.ensureHelper().path, nodePath: process.execPath, existing: request.env }) : null;
     // Hosts from 0.17 take per-open instructions; older ones ignore the field and rely on the saved prompt above.
     const saved = request.metadata?.[SOFT_RULE_METADATA_KEY] === true;
     return {
@@ -98,6 +98,7 @@ export default function contribute(server: PluginServerContext) {
     const saved = rt.store.set(config);
     await rt.webhooks.apply(saved.webhooks);
     await rt.clientApi.apply(saved.clientApi);
+    rt.ensureHelper();
     return { config: saved };
   });
   server.handle(webhookStatusRpc, () => rt.webhooks.status());
@@ -183,6 +184,7 @@ export default function contribute(server: PluginServerContext) {
   // The listener is off unless the user enabled it. A start error is shown in the Auth tab, never thrown.
   void rt.webhooks.apply(rt.store.get().webhooks);
   void rt.clientApi.apply(rt.store.get().clientApi);
+  rt.ensureHelper();
 
   return () => rt.dispose();
 }

@@ -250,7 +250,7 @@ describe("listeners", () => {
   it("refuses a non-loopback bind without a token, and starts it with one", async () => {
     const t = setup();
     let tokenSet = false;
-    const server = new ClientApiServer(t.api, () => tokenSet, () => true);
+    const server = new ClientApiServer(t.api, () => tokenSet, () => ({ found: true, error: "" }));
     servers.push(server);
     await server.apply({ enabled: true, port: 0, bind: "0.0.0.0", injectEnv: true });
     expect(server.status()).toMatchObject({ listening: false, loopback: false });
@@ -264,7 +264,7 @@ describe("listeners", () => {
     const parsed = defaultConfig().clientApi;
     expect(parsed).toEqual({ enabled: false, port: 8788, bind: "127.0.0.1", injectEnv: true });
     const t = setup({ replies: [{ status: 200, headers: json, body: { ok: 1 } }] });
-    const server = new ClientApiServer(t.api, () => false, () => true);
+    const server = new ClientApiServer(t.api, () => false, () => ({ found: true, error: "" }));
     servers.push(server);
     await server.apply({ ...parsed, enabled: true, port: 0 });
     const port = server.address()!;
@@ -291,7 +291,7 @@ describe("listeners", () => {
 describe("environment injection", () => {
   const config = { enabled: true, port: 8788, bind: "127.0.0.1", injectEnv: true };
   it("sets the proxy URL, the token and the git configuration", () => {
-    const env = clientEnv({ config, token: "tok", helperPath: "/opt/plugin/server/git-credential-helper.mjs" });
+    const env = clientEnv({ config, token: "tok", helperPath: "/data/git-credential-helper.mjs", nodePath: "/usr/lib/node/bin/node" });
     expect(env).toEqual({
       GH_PROXY_URL: "http://127.0.0.1:8788",
       GH_PROXY_TOKEN: "tok",
@@ -299,7 +299,7 @@ describe("environment injection", () => {
       GIT_CONFIG_KEY_0: "credential.https://github.com.helper",
       GIT_CONFIG_VALUE_0: "",
       GIT_CONFIG_KEY_1: "credential.https://github.com.helper",
-      GIT_CONFIG_VALUE_1: "!node '/opt/plugin/server/git-credential-helper.mjs'",
+      GIT_CONFIG_VALUE_1: "!'/usr/lib/node/bin/node' '/data/git-credential-helper.mjs'",
       GIT_CONFIG_KEY_2: "credential.https://github.com.useHttpPath",
       GIT_CONFIG_VALUE_2: "true",
     });
@@ -310,7 +310,7 @@ describe("environment injection", () => {
     expect(env.GIT_CONFIG_COUNT).toBe("5");
     expect(env.GIT_CONFIG_KEY_2).toBe("credential.https://github.com.helper");
     expect(env.GIT_CONFIG_KEY_0).toBeUndefined();
-    expect(env.GIT_CONFIG_VALUE_3).toBe(`!node '/home/o'\\''neil/x y.mjs'`);
+    expect(env.GIT_CONFIG_VALUE_3).toBe(`!'node' '/home/o'\\''neil/x y.mjs'`);
   });
   it("skips git when the helper script is missing, and maps a wildcard bind to loopback", () => {
     const env = clientEnv({ config: { ...config, bind: "0.0.0.0" }, token: "", helperPath: null });

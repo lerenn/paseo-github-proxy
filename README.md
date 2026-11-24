@@ -116,7 +116,7 @@ For tools that are not the `github_*` tools: the `gh` shim of a lab image and `g
 
 - `GET|POST|PATCH|PUT|DELETE /v1/rest/{path...}` and `POST /v1/graphql` (with `X-Proxy-Repo`) run the same pipeline as the tools: owner allowlist, policy, per-owner App, rate limits, cache, activity log. A denial is `403 {"error":"policy_denied","rule":...,"action":...,"message":...}`.
 - `POST /v1/git-credential` answers `https://github.com/<owner>/<repo>` with `x-access-token` and an installation token of the App serving the owner, limited to that repository: read-only unless the policy allows Write file and Create branch there. The helper protocol cannot tell a fetch from a push, so the policy decides.
-- `server/git-credential-helper.mjs` is the git credential helper. With **Set it up in every new agent session** on (default), new sessions get `GH_PROXY_URL`, `GH_PROXY_TOKEN` and the git configuration through `GIT_CONFIG_*`. It affects only sessions opened afterwards, and is independent of the soft and hard rules (those are about raw access; this path goes through the policy).
+- The git credential helper (`server/git-credential-helper.mjs`, embedded in the plugin and written to its data directory as `git-credential-helper.mjs`) is the git credential helper. With **Set it up in every new agent session** on (default), new sessions get `GH_PROXY_URL`, `GH_PROXY_TOKEN` and the git configuration through `GIT_CONFIG_*`. It affects only sessions opened afterwards, and is independent of the soft and hard rules (those are about raw access; this path goes through the policy).
 
 Details, the routes, what the lab image needs and what differs from the old Go proxy: [docs/client-api.md](docs/client-api.md).
 

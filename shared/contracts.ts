@@ -157,8 +157,10 @@ export const clientApiStatusRpc = defineRpc({
     tokenSet: z.boolean(),
     /** The URL agents use (GH_PROXY_URL). */
     url: z.string(),
-    /** Whether the credential helper script was found next to the plugin. */
+    /** Whether the credential helper script is in place (written to the plugin data directory). */
     helperFound: z.boolean(),
+    /** Why it could not be written, empty otherwise. */
+    helperError: z.string().default(""),
     lastRequestAt: z.number().nullable(),
     counters: z.object({ requests: z.number(), denied: z.number(), unauthorized: z.number(), gitCredentials: z.number() }),
   }),
