@@ -4,6 +4,12 @@ import { ProxyError } from "./proxy";
 import { PR_STATE_QUERY, REQUIRES_QUEUE_QUERY, queueResult } from "./mergequeue";
 import { clip, clipText, encPath, issue, need, page, pagination, repoField, served, type Kit } from "./toolkit";
 
+/** `/dir/file` for a path inside the repository, or nothing for its root. */
+const contentPath = (path: string | undefined): string => {
+  const clean = (path ?? "").replace(/^\/+|\/+$/g, "");
+  return clean ? `/${encPath(clean)}` : "";
+};
+
 const MERGE_METHODS = { merge: "MERGE", squash: "SQUASH", rebase: "REBASE" } as const;
 
 /** Commits, files, branches, issue edits and pull request management. */
@@ -70,7 +76,7 @@ export function prTools(kit: Kit): AgentToolDefinition[] {
       async (i, _ctx, c) => {
         const target = await c.repo(i.repo);
         if (i.operation === "read") {
-          const r = await get(c, `/repos/${target}/contents/${encPath(i.path ?? "")}`, { ref: i.ref });
+          const r = await get(c, `/repos/${target}/contents${contentPath(i.path)}`, { ref: i.ref });
           const d = r.data as any;
           if (Array.isArray(d)) return clip(d.map((e) => ({ name: e.name, path: e.path, type: e.type, size: e.size, sha: e.sha }))) + served(r);
           const text = d.encoding === "base64" ? Buffer.from(String(d.content ?? ""), "base64").toString("utf8") : String(d.content ?? "");
@@ -83,13 +89,13 @@ export function prTools(kit: Kit): AgentToolDefinition[] {
         }
         if (i.operation === "write") {
           const body = { message: need(i.message, "message", "write"), content: base64(need(i.content, "content", "write")), ...(i.branch ? { branch: i.branch } : {}), ...(i.sha ? { sha: i.sha } : {}) };
-          const r = await write(c, "PUT", `/repos/${target}/contents/${encPath(need(i.path, "path", "write"))}`, "write_file", body);
+          const r = await write(c, "PUT", `/repos/${target}/contents${contentPath(need(i.path, "path", "write"))}`, "write_file", body);
           const d = r.data as any;
           return clip({ path: d.content?.path, sha: d.content?.sha, commit: d.commit?.sha, url: d.commit?.html_url });
         }
         if (i.operation === "delete") {
           const body = { message: need(i.message, "message", "delete"), sha: need(i.sha, "sha", "delete"), ...(i.branch ? { branch: i.branch } : {}) };
-          const r = await write(c, "DELETE", `/repos/${target}/contents/${encPath(need(i.path, "path", "delete"))}`, "write_file", body);
+          const r = await write(c, "DELETE", `/repos/${target}/contents${contentPath(need(i.path, "path", "delete"))}`, "write_file", body);
           return `Deleted ${i.path}: commit ${(r.data as any).commit?.sha}`;
         }
         const name = need(i.branch, "branch (the new branch name)", "create_branch");

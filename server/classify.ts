@@ -1,4 +1,5 @@
 import type { Action } from "../shared/actions";
+import { canonicalRestPath } from "./path";
 
 export interface Classified {
   /** Owner/repo, or "" when the path has no repository. */
@@ -13,17 +14,8 @@ export interface Classified {
 
 const REPO_PATH = /^\/repos\/([^/]+)\/([^/]+)(\/.*)?$/;
 
-/** Splits and cleans a REST path: leading slash, no query string, no scheme/host. */
-export function normalizePath(input: string): { path: string; query: string } {
-  let raw = input.trim();
-  raw = raw.replace(/^https?:\/\/api\.github\.com/i, "");
-  if (!raw.startsWith("/")) raw = `/${raw}`;
-  const [path = "/", ...rest] = raw.split("?");
-  return { path: path.replace(/\/{2,}/g, "/").replace(/\/$/, "") || "/", query: rest.join("?") };
-}
-
 function searchOwners(query: string): { owners: string[]; scoped: boolean } {
-  const q = decodeURIComponent(new URLSearchParams(query).get("q") ?? "");
+  const q = new URLSearchParams(query).get("q") ?? "";
   const owners: string[] = [];
   for (const m of q.matchAll(/\b(?:repo|org|user):("?)([^\s"]+)\1/gi)) {
     const value = m[2] ?? "";
@@ -76,9 +68,9 @@ function accountWriteActions(method: string, path: string): Action[] {
 }
 
 /** Classifies a generic REST call: which owner it touches and which actions it needs. */
-export function classifyRest(methodIn: string, pathIn: string, body?: unknown): Classified {
+export function classifyRest(methodIn: string, pathIn: string, body?: unknown, query = ""): Classified {
   const method = methodIn.toUpperCase();
-  const { path, query } = normalizePath(pathIn);
+  const path = canonicalRestPath(pathIn); // throws PathError: the path that is classified is the path that is sent
   const read = method === "GET" || method === "HEAD";
   const base = (specific: Action[]): Action[] => (read ? ["generic_api_read"] : [...specific, "generic_api_write"]);
 

@@ -8,6 +8,8 @@ Order of evaluation for one call:
 
 ## Classification of `github_api`
 
+The path is validated first (see [ADR](adrs/2026-11-26-rest-path-canonicalization.md)): dot segments, encoded dots or slashes, `//`, backslashes, `?` or `#` in the path, control or non-ASCII characters, absolute URLs and malformed owner or repository names are refused, not normalized, so the owner that is checked is the owner that is fetched. Pass the query string in `params`.
+
 | Request | Actions needed |
 | --- | --- |
 | `GET`, `HEAD`, GraphQL query | `generic_api_read` |

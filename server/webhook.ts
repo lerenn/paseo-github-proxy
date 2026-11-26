@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import http from "node:http";
 import { resolveApp, WEBHOOK_PATH, type AppEntry, type WebhooksConfig } from "../shared/config";
 import { EventLog } from "./eventstats";
+import { isOwnerName } from "./path";
 import { eventOwner, parseEvent, type Parsed } from "./events";
 
 export const MAX_BODY_BYTES = 1_048_576;
@@ -115,7 +116,7 @@ export class WebhookReceiver {
     }
 
     const owner = eventOwner(payload);
-    if (!owner || resolveApp(this.deps.apps(), owner)?.id !== signer.id) {
+    if (!owner || !isOwnerName(owner) || resolveApp(this.deps.apps(), owner)?.id !== signer.id) {
       this.counters.badOwner++;
       this.events.record("badOwner");
       return { status: 403, text: "forbidden" };

@@ -6,7 +6,8 @@ import { appName, appOwners, resolveApp, type AppEntry } from "../shared/config"
 import { appKey, type AppDirectory } from "./apps";
 import { AuthError, chooseSources, type FetchFn, type TokenSource } from "./auth";
 import { cacheKey, isFresh, type CacheEntry, type ResponseCache } from "./cache";
-import { classifyGraphql, classifyRest, normalizePath, type Classified } from "./classify";
+import { classifyGraphql, classifyRest, type Classified } from "./classify";
+import { canonicalRestPath, parseOwner, parseRepo, PathError } from "./path";
 import { evaluate, ownerAllowed, ownerDenial, type Decision } from "./policy";
 import { detectLimit, limitMessage, parseRateLimit, resourceOf, type RateLimitTracker } from "./ratelimit";
 
@@ -109,17 +110,28 @@ export class GithubProxy {
 
   // ---- public entry points -------------------------------------------------------------------
 
-  async rest(ctx: CallContext, input: { method: string; path: string; query?: Record<string, string | number | undefined>; body?: unknown; actions?: Action[]; accept?: string }): Promise<ProxyResponse> {
-    const { path, query: pathQuery } = normalizePath(input.path);
-    const params = new URLSearchParams(pathQuery);
-    for (const [k, v] of Object.entries(input.query ?? {})) if (v !== undefined && v !== "") params.set(k, String(v));
-    const qs = params.toString();
+  async rest(ctx: CallContext, input: { method: string; path: string; query?: Record<string, string | number | undefined>; rawQuery?: string; body?: unknown; actions?: Action[]; accept?: string }): Promise<ProxyResponse> {
     const method = input.method.toUpperCase();
-    const classified = classifyRest(method, qs ? `${path}?${qs}` : path, input.body);
+    let path: string;
+    let qs: string;
+    let url: string;
+    let classified: Classified;
+    try {
+      // One string for everything: classification, policy, cache key and fetch. `path` never holds a query string.
+      path = canonicalRestPath(input.path);
+      const params = new URLSearchParams(input.rawQuery ?? "");
+      for (const [k, v] of Object.entries(input.query ?? {})) if (v !== undefined && v !== "") params.set(k, String(v));
+      qs = params.toString();
+      url = this.target(path, qs);
+      classified = classifyRest(method, path, input.body, qs);
+    } catch (error) {
+      if (error instanceof PathError) this.refuse(ctx, { repo: "", owners: [], actions: input.actions ?? [] }, error.message);
+      throw error;
+    }
     // A curated tool states what it does; only github_api is classified from the path.
     if (input.actions) classified.actions = input.actions;
     const body = input.body === undefined ? undefined : JSON.stringify(input.body);
-    return this.run(ctx, { method, url: `${this.base}${path}${qs ? `?${qs}` : ""}`, ...(body !== undefined ? { body } : {}), classified, resource: resourceOf(path), cacheable: method === "GET", owners: classified.owners, ...(input.accept ? { accept: input.accept } : {}), invalidates: invalidationOf(classified.repo, path) });
+    return this.run(ctx, { method, url, ...(body !== undefined ? { body } : {}), classified, resource: resourceOf(path), cacheable: method === "GET", owners: classified.owners, ...(input.accept ? { accept: input.accept } : {}), invalidates: invalidationOf(classified.repo, path) });
   }
 
   /**
@@ -127,7 +139,15 @@ export class GithubProxy {
    * the call does, and the document is not parsed for scoping. Only `github_api` is classified from the document.
    */
   async graphql(ctx: CallContext, input: { query: string; variables?: Record<string, unknown>; repo?: string; actions?: Action[]; owner?: string }): Promise<ProxyResponse> {
-    const classified = classifyGraphql(input.query, input.repo ?? "", input.variables);
+    let classified: ReturnType<typeof classifyGraphql>;
+    try {
+      if (input.repo) parseRepo(input.repo);
+      if (input.owner) parseOwner(input.owner);
+      classified = classifyGraphql(input.query, input.repo ?? "", input.variables);
+    } catch (error) {
+      if (error instanceof PathError) this.refuse(ctx, { repo: "", owners: [], actions: input.actions ?? [] }, error.message);
+      throw error;
+    }
     if (input.actions) {
       classified.actions = input.actions;
       if (input.owner) classified.owners = [input.owner.toLowerCase()];
@@ -142,8 +162,14 @@ export class GithubProxy {
 
   /** Same checks as a real call, nothing sent to GitHub: for the "test this call" box. */
   dryRun(input: { kind: "rest" | "graphql"; method?: string; path?: string; query?: string; repo?: string; body?: unknown }): DryRun {
-    const classified =
-      input.kind === "graphql" ? classifyGraphql(input.query ?? "", input.repo ?? "", undefined) : classifyRest(input.method ?? "GET", input.path ?? "/", input.body);
+    let classified: Classified;
+    try {
+      if (input.repo) parseRepo(input.repo);
+      classified = input.kind === "graphql" ? classifyGraphql(input.query ?? "", input.repo ?? "", undefined) : classifyRest(input.method ?? "GET", input.path ?? "/", input.body, input.query ?? "");
+    } catch (error) {
+      if (error instanceof PathError) return { allowed: false, message: error.message, repo: "", actions: [], rule: null };
+      throw error;
+    }
     const verdict = this.judge(classified);
     return { allowed: verdict.allowed, message: verdict.allowed ? "Allowed." : verdict.message, repo: classified.repo, actions: classified.actions, rule: verdict.rule };
   }
@@ -161,8 +187,24 @@ export class GithubProxy {
   async lookup(path: string, query: Record<string, string | number> = {}, via?: { app: string }): Promise<unknown> {
     const params = new URLSearchParams(Object.entries(query).map(([k, v]): [string, string] => [k, String(v)]));
     const qs = params.toString();
-    const p: Prepared = { method: "GET", url: `${this.base}${path}${qs ? `?${qs}` : ""}`, classified: classifyRest("GET", path), resource: resourceOf(path), cacheable: true, owners: [], ...(via ? { via } : {}) };
+    canonicalRestPath(path);
+    const p: Prepared = { method: "GET", url: this.target(path, qs), classified: classifyRest("GET", path), resource: resourceOf(path), cacheable: true, owners: [], ...(via ? { via } : {}) };
     return (await this.fetchThrough(p)).data;
+  }
+
+  /**
+   * The URL of a call, built once from the validated path. It is parsed back and must name the configured API host,
+   * carry exactly this path and exactly this query, and no fragment: anything else is refused, never sent.
+   */
+  private target(path: string, qs: string): string {
+    const url = `${this.base}${path}${qs ? `?${qs}` : ""}`;
+    const base = new URL(this.base);
+    const parsed = new URL(url);
+    const expected = `${base.pathname.replace(/\/+$/, "")}${path}`;
+    if (parsed.origin !== base.origin || parsed.pathname !== expected || parsed.search !== (qs ? `?${qs}` : "") || parsed.hash !== "" || parsed.username || parsed.password) {
+      throw new PathError(`Denied: the path ${JSON.stringify(path.slice(0, 80))} does not resolve to itself on ${base.origin}. Rule: only a path that the HTTP client leaves unchanged is sent. Do not retry this call as is: pass a plain path.`);
+    }
+    return url;
   }
 
   // ---- internals -----------------------------------------------------------------------------
@@ -207,6 +249,14 @@ export class GithubProxy {
    * stated actions, the outcome in the activity log. Throws a denial written for the agent.
    */
   authorize(ctx: CallContext, repo: string, actions: Action[], detail = ""): void {
+    if (repo) {
+      try {
+        parseRepo(repo);
+      } catch (error) {
+        if (error instanceof PathError) this.refuse(ctx, { repo: "", owners: [], actions }, error.message);
+        throw error;
+      }
+    }
     const classified: Classified = { repo, owners: repo ? [repo.split("/")[0]!.toLowerCase()] : [], actions };
     const verdict = this.judge(classified);
     if (!verdict.allowed) this.refuse(ctx, classified, verdict.message, verdict);

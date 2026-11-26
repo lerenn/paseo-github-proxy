@@ -3,9 +3,20 @@ import { z } from "zod";
 import { defineAgentTool, type AgentToolContext, type AgentToolDefinition, type AgentToolResult } from "@getpaseo/plugin/server";
 import type { Action } from "../shared/actions";
 import type { SubscriptionStore } from "./subscriptions";
+import { PathError, parseRepo } from "./path";
 import { ProxyError, type CallContext, type GithubProxy, type ProxyResponse } from "./proxy";
 
 /** Helpers shared by every group of agent tools (tools.ts and the tools-*.ts files). */
+
+/** Runs a validator and turns its refusal into the tool error the agent reads. */
+export function guard<T>(check: () => T): T {
+  try {
+    return check();
+  } catch (error) {
+    if (error instanceof PathError) throw new ProxyError("denied", error.message);
+    throw error;
+  }
+}
 
 export const MAX_CHARS = 40_000;
 
@@ -81,7 +92,7 @@ export interface Kit {
   /** A cacheable read (action: read). */
   get(c: Call, path: string, query?: Query, accept?: string): Promise<ProxyResponse>;
   /** A write whose action the tool states. */
-  write(c: Call, method: string, path: string, action: Action, body?: unknown): Promise<ProxyResponse>;
+  write(c: Call, method: string, path: string, action: Action, body?: unknown, query?: Query): Promise<ProxyResponse>;
   /** A GraphQL call of a curated tool: its document is fixed in code, the tool states the actions. */
   gql(c: Call, query: string, variables: Record<string, unknown>, o: { actions: Action[]; repo?: string; owner?: string }): Promise<ProxyResponse>;
 }
@@ -96,8 +107,8 @@ export function createKit(deps: ToolsDeps): Kit {
     ctx: { agentId: ctx.agent.id, agentTitle: ctx.agent.title ?? ctx.agent.id, tool: name },
     async repo(given) {
       const value = (given ?? "").trim() || repoFromRemote(await remoteOf(ctx.agent.cwd));
-      if (!/^[^/\s]+\/[^/\s]+$/.test(value)) throw new ProxyError("invalid", "Pass repo as owner/name (it could not be inferred from the working directory).");
-      return value;
+      if (!value.includes("/") && !/\s/.test(value)) throw new ProxyError("invalid", "Pass repo as owner/name (it could not be inferred from the working directory).");
+      return guard(() => parseRepo(value).full);
     },
   });
 
@@ -121,7 +132,7 @@ export function createKit(deps: ToolsDeps): Kit {
       });
     },
     get: (c, path, query, accept) => proxy.rest(c.ctx, { method: "GET", path, ...(query ? { query } : {}), ...(accept ? { accept } : {}), actions: ["read"] }),
-    write: (c, method, path, action, body) => proxy.rest(c.ctx, { method, path, ...(body !== undefined ? { body } : {}), actions: [action] }),
+    write: (c, method, path, action, body, query) => proxy.rest(c.ctx, { method, path, ...(body !== undefined ? { body } : {}), ...(query ? { query } : {}), actions: [action] }),
     gql: (c, query, variables, o) => proxy.graphql(c.ctx, { query, variables, ...(o.repo ? { repo: o.repo } : {}), ...(o.owner ? { owner: o.owner } : {}), actions: o.actions }),
   };
 }
