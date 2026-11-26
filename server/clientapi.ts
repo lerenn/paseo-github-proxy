@@ -129,7 +129,7 @@ export class ClientApi {
   private async rest(ctx: CallContext, req: ClientRequest, rest: string, query: string): Promise<ClientReply> {
     const method = req.method.toUpperCase();
     if (!["GET", "POST", "PATCH", "PUT", "DELETE"].includes(method)) return json(405, { error: "method_not_allowed" });
-    const path = `/${rest.replace(/^\/+/, "")}`;
+    const path = `/${rest}`; // verbatim: the proxy refuses anything but a plain path
     if (path === "/") return json(404, { error: "route_not_found" });
     let body: unknown;
     if (method !== "GET" && req.body.length > 0) {
@@ -140,7 +140,7 @@ export class ClientApi {
       }
     }
     const accept = req.headers.accept;
-    const res = await this.deps.proxy.rest({ ...ctx, tool: `client ${method}` }, { method, path: query ? `${path}?${query}` : path, ...(body !== undefined ? { body } : {}), ...(accept && !/^\*\/\*$/.test(accept.trim()) && accept !== "application/vnd.github+json" ? { accept } : {}) });
+    const res = await this.deps.proxy.rest({ ...ctx, tool: `client ${method}` }, { method, path, ...(query ? { rawQuery: query } : {}), ...(body !== undefined ? { body } : {}), ...(accept && !/^\*\/\*$/.test(accept.trim()) && accept !== "application/vnd.github+json" ? { accept } : {}) });
     const headers: Record<string, string> = { "content-type": res.contentType ?? "application/json", "x-proxy-cache": res.served === "upstream" ? "miss" : res.served === "cache" ? "cache_hit" : res.served };
     if (res.etag) headers.etag = res.etag;
     if (res.link) headers.link = res.link;

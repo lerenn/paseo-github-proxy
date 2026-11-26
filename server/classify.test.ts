@@ -3,7 +3,7 @@ import { classifyGraphql, classifyRest, parseGraphql } from "./classify";
 
 describe("classifyRest", () => {
   it("reads are generic_api_read only", () => {
-    const c = classifyRest("GET", "/repos/Acme/web/pulls?state=open");
+    const c = classifyRest("GET", "/repos/Acme/web/pulls", undefined, "state=open");
     expect(c).toMatchObject({ repo: "Acme/web", owners: ["acme"], actions: ["generic_api_read"] });
   });
   it("maps writes to specific actions plus generic_api_write", () => {
@@ -51,8 +51,8 @@ describe("classifyRest", () => {
     expect(w("GET", "/repos/a/b/releases")).toEqual(["generic_api_read"]);
     expect(classifyRest("POST", "/gists").unscoped).toBeTruthy();
   });
-  it("normalizes full URLs and double slashes", () => {
-    expect(classifyRest("GET", "https://api.github.com//repos/a/b/").repo).toBe("a/b");
+  it("refuses full URLs, double slashes and trailing slashes instead of normalizing them", () => {
+    for (const p of ["https://api.github.com/repos/a/b", "//repos/a/b", "/repos//a/b", "/repos/a/b/", "repos/a/b"]) expect(() => classifyRest("GET", p), p).toThrow(/Do not retry/);
   });
   it("flags paths that cannot be scoped to an owner, but not /rate_limit", () => {
     expect(classifyRest("GET", "/user/repos").unscoped).toBeTruthy();
@@ -60,8 +60,8 @@ describe("classifyRest", () => {
     expect(classifyRest("GET", "/orgs/acme/members").owners).toEqual(["acme"]);
   });
   it("requires a search scope qualifier", () => {
-    expect(classifyRest("GET", "/search/issues?q=bug").unscoped).toBeTruthy();
-    const c = classifyRest("GET", "/search/issues?q=bug+repo%3Aacme%2Fweb+org%3AOther");
+    expect(classifyRest("GET", "/search/issues", undefined, "q=bug").unscoped).toBeTruthy();
+    const c = classifyRest("GET", "/search/issues", undefined, "q=bug+repo%3Aacme%2Fweb+org%3AOther");
     expect(c.unscoped).toBeUndefined();
     expect(c.owners).toEqual(["acme", "other"]);
   });

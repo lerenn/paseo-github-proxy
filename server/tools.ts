@@ -7,7 +7,8 @@ import { accountTools } from "./tools-account";
 import { prTools } from "./tools-pr";
 import { eventTools } from "./tools-events";
 import { repoTools } from "./tools-repo";
-import { clip, clipText, createKit, issue, page, pagination, pr, repoField, served, type ToolsDeps } from "./toolkit";
+import { parseOwner, parseRepo } from "./path";
+import { clip, clipText, createKit, guard, issue, page, pagination, pr, repoField, served, type ToolsDeps } from "./toolkit";
 
 export { repoFromRemote, type ToolsDeps } from "./toolkit";
 
@@ -205,6 +206,9 @@ export function buildTools(deps: ToolsDeps): AgentToolDefinition[] {
       "Search GitHub. Scope it with repo, org or user (required). type: issues, prs, code, repos or commits.",
       z.object({ query: z.string(), type: z.enum(["issues", "prs", "code", "repos", "commits"]).default("issues"), repo: z.string().optional(), org: z.string().optional(), user: z.string().optional(), sort: z.string().optional().describe("For example updated, created, comments, stars, indexed."), order: z.enum(["asc", "desc"]).optional(), ...page }),
       async ({ query, type, repo, org, user, sort, order, page: pg, per_page }, _ctx, c) => {
+        if (repo) guard(() => parseRepo(repo));
+        if (org) guard(() => parseOwner(org));
+        if (user) guard(() => parseOwner(user));
         const qualifiers = [repo && `repo:${repo}`, org && `org:${org}`, user && `user:${user}`].filter(Boolean).join(" ");
         const q = [query, type === "prs" ? "is:pr" : type === "issues" ? "is:issue" : "", qualifiers].filter(Boolean).join(" ");
         const endpoint = type === "prs" || type === "issues" ? "issues" : type === "repos" ? "repositories" : type;

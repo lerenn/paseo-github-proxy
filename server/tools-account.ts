@@ -1,7 +1,8 @@
 import { z } from "zod";
 import type { AgentToolDefinition } from "@getpaseo/plugin/server";
 import { ProxyError } from "./proxy";
-import { clip, clipText, need, page, pagination, served, type Call, type Kit } from "./toolkit";
+import { parseOwner, parseRepo } from "./path";
+import { clip, clipText, guard, need, page, pagination, served, type Call, type Kit } from "./toolkit";
 
 const FIELD_NAME = "... on ProjectV2FieldCommon { id name }";
 const PROJECT_FIELDS = `fields(first: 50) { nodes { ... on ProjectV2Field { id name dataType } ... on ProjectV2SingleSelectField { id name dataType options { id name } } ... on ProjectV2IterationField { id name dataType configuration { iterations { id title startDate } } } } }`;
@@ -37,7 +38,7 @@ export function accountTools(kit: Kit): AgentToolDefinition[] {
       }),
       async (i, _ctx, c) => {
         const pg = { page: i.page, per_page: i.per_page ?? 30 };
-        const owner = () => need(i.owner, "owner", i.operation);
+        const owner = () => guard(() => parseOwner(need(i.owner, "owner", i.operation)));
         const person = (u: any) => ({ login: u.login, name: u.name, type: u.type, company: u.company, bio: u.bio, public_repos: u.public_repos, url: u.html_url });
         switch (i.operation) {
           case "user":
@@ -73,12 +74,12 @@ export function accountTools(kit: Kit): AgentToolDefinition[] {
             return clip((r.data as any[]).map((o) => o.login)) + pagination(r) + served(r);
           }
           case "notifications": {
-            const r = await get(c, i.repo ? `/repos/${i.repo}/notifications` : "/notifications", { all: i.all ? "true" : undefined, participating: i.participating ? "true" : undefined, ...pg });
+            const r = await get(c, i.repo ? `/repos/${guard(() => parseRepo(i.repo!).full)}/notifications` : "/notifications", { all: i.all ? "true" : undefined, participating: i.participating ? "true" : undefined, ...pg });
             return clip((r.data as any[]).map((n) => ({ thread_id: n.id, reason: n.reason, unread: n.unread, repo: n.repository?.full_name, title: n.subject?.title, type: n.subject?.type, url: n.subject?.url, updated_at: n.updated_at }))) + pagination(r) + served(r);
           }
           default: {
             if (i.thread_id) await write(c, "PATCH", `/notifications/threads/${encodeURIComponent(i.thread_id)}`, "manage_notifications");
-            else await write(c, "PUT", i.repo ? `/repos/${i.repo}/notifications` : "/notifications", "manage_notifications", {});
+            else await write(c, "PUT", i.repo ? `/repos/${guard(() => parseRepo(i.repo!).full)}/notifications` : "/notifications", "manage_notifications", {});
             return i.thread_id ? `Marked thread ${i.thread_id} as read.` : `Marked ${i.repo ? `the notifications of ${i.repo}` : "all notifications"} as read.`;
           }
         }
@@ -100,7 +101,7 @@ export function accountTools(kit: Kit): AgentToolDefinition[] {
       async (i, _ctx, c) => {
         const gist = (g: any) => ({ id: g.id, description: g.description, public: g.public, files: Object.keys(g.files ?? {}), updated_at: g.updated_at, url: g.html_url });
         if (i.operation === "list") {
-          const r = await get(c, i.user ? `/users/${i.user}/gists` : "/gists", { page: i.page, per_page: i.per_page ?? 30 });
+          const r = await get(c, i.user ? `/users/${guard(() => parseOwner(i.user!))}/gists` : "/gists", { page: i.page, per_page: i.per_page ?? 30 });
           return clip((r.data as any[]).map(gist)) + pagination(r) + served(r);
         }
         if (i.operation === "create") {
@@ -147,7 +148,7 @@ export function accountTools(kit: Kit): AgentToolDefinition[] {
         if (!project) throw new ProxyError("invalid", `No project ${i.owner}#${number} (or the token cannot see it).`);
         if (i.operation === "view") return clip({ ...project, fields: project.fields?.nodes });
         if (i.operation === "add_item") {
-          const repo = need(i.repo, "repo", "add_item");
+          const repo = guard(() => parseRepo(need(i.repo, "repo", "add_item")).full);
           const content = ((await get(c, `/repos/${repo}/issues/${need(i.issue_number, "issue_number", "add_item")}`)).data as any).node_id;
           const d = await query(c, "mutation($input: AddProjectV2ItemByIdInput!) { addProjectV2ItemById(input: $input) { item { id } } }", { input: { projectId: project.id, contentId: content } }, i.owner, ["manage_project"]);
           return `Added ${repo}#${i.issue_number} to ${i.owner}#${number}: item ${d.addProjectV2ItemById?.item?.id}.`;

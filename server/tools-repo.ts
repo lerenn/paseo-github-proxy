@@ -144,7 +144,7 @@ export function repoTools(kit: Kit): AgentToolDefinition[] {
             return `Deleted run ${i.run_id}.`;
           default:
             if (i.cache_id) await write(c, "DELETE", `${base}/caches/${i.cache_id}`, "manage_actions");
-            else await write(c, "DELETE", `${base}/caches?key=${encodeURIComponent(need(i.key, "cache_id or key", "delete_cache"))}`, "manage_actions");
+            else await write(c, "DELETE", `${base}/caches`, "manage_actions", undefined, { key: need(i.key, "cache_id or key", "delete_cache") });
             return "Deleted the cache.";
         }
       },

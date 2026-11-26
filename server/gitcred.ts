@@ -1,4 +1,5 @@
 import type { Action } from "../shared/actions";
+import { isOwnerName, isRepoName } from "./path";
 import { resolveApp, type AppEntry } from "../shared/config";
 import { AuthError, createAppJwt, type AppCredentials, type FetchFn } from "./auth";
 import { ProxyError, type CallContext } from "./proxy";
@@ -29,7 +30,7 @@ export function repoFromGitPath(path: string): { owner: string; name: string } |
   if (parts.length !== 2) return null;
   const owner = parts[0]!;
   const name = parts[1]!.replace(/\.git$/i, "");
-  if (!/^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/.test(owner) || !/^[A-Za-z0-9._-]+$/.test(name) || name === "." || name === "..") return null;
+  if (!isOwnerName(owner) || !isRepoName(name)) return null;
   return { owner, name };
 }
 
@@ -69,6 +70,7 @@ export class GitCredentials {
    * read). `"read"` asks for the read token whatever the policy allows. `"write"` is refused unless the policy allows it.
    */
   async token(ctx: CallContext, owner: string, name: string, access?: GitAccess): Promise<GitToken> {
+    if (!isOwnerName(owner) || !isRepoName(name)) throw new ProxyError("denied", `Denied: the repository ${JSON.stringify(`${owner}/${name}`.slice(0, 80))} is not a plain owner/name. Do not retry this call as is.`);
     const repo = `${owner}/${name}`.toLowerCase();
     const writeVerdict = access === "read" ? null : this.deps.proxy.judgeAction(repo, ["write_file", "create_branch"]);
     if (access === "write" && !writeVerdict!.allowed) {

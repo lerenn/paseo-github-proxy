@@ -29,6 +29,7 @@
 
 <h2 id="pipeline">The pipeline of one call</h2>
 <ol class="steps">
+<li><strong>Validate.</strong> A REST path with dot segments, encoded dots or slashes, a <code>?</code> or <code>#</code>, or an absolute URL is refused, never rewritten, so the checked owner is the fetched owner.</li>
 <li><strong>Classify.</strong> A curated tool states its action (for example <code>create_pr</code>). <code>github_api</code> is classified from the request: the method, the path, or the GraphQL root fields.</li>
 <li><strong>Owner allowlist.</strong> Every owner the call touches must be allowed. A call that cannot be tied to an owner is refused, unless every owner is allowed.</li>
 <li><strong>Policy.</strong> Each needed action is checked. A matching deny rule wins, then an allow rule, then the default permissions. A denial returns a message naming the rule and reason.</li>
